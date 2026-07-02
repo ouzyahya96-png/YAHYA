@@ -1,0 +1,2964 @@
+package com.example.ui
+
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.example.data.*
+import com.example.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.*
+
+// --- Reusable Elegant Components ---
+
+@Composable
+fun GoldGradientButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    testTag: String = ""
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+        contentPadding = PaddingValues(),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .testTag(testTag)
+            .graphicsLayer { clip = true }
+            .background(
+                brush = Brush.horizontalGradient(
+                    colors = if (enabled) listOf(GoldClassic, GoldDeep) else listOf(MediumGray, MediumGray)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+        )
+    }
+}
+
+@Composable
+fun OperationsCard(
+    modifier: Modifier = Modifier,
+    borderAccent: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = WhitePure),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            width = if (borderAccent) 1.5.dp else 1.dp,
+            color = if (borderAccent) GoldClassic else LightGrayDivider
+        ),
+        modifier = modifier.fillMaxWidth(),
+        content = content
+    )
+}
+
+@Composable
+fun PageHeader(
+    title: String,
+    subtitle: String,
+    action: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 24.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Anthracite,
+                letterSpacing = (-0.5).sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = subtitle,
+                fontSize = 13.sp,
+                color = MediumGray
+            )
+        }
+        if (action != null) {
+            Spacer(modifier = Modifier.width(16.dp))
+            action()
+        }
+    }
+}
+
+
+// --- SCREEN 1: DASHBOARD ---
+
+@Composable
+fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Unit) {
+    val tasks by viewModel.tasks.collectAsState()
+    val gymSessions by viewModel.gymSessions.collectAsState()
+    val supplementLogs by viewModel.supplementLogs.collectAsState()
+    val sleepLogs by viewModel.sleepLogs.collectAsState()
+
+    val geminiAnalysis by viewModel.geminiAnalysis.collectAsState()
+    val isLoadingAnalysis by viewModel.isLoadingAnalysis.collectAsState()
+    val analysisError by viewModel.analysisError.collectAsState()
+    val hasApiKey = viewModel.geminiApiKey.collectAsState().value.isNotEmpty()
+
+    val todayStr = viewModel.getTodayDate()
+
+    val remainingTasks = tasks.filter { it.date == todayStr && !it.done }
+    val nextTask = remainingTasks.firstOrNull()
+
+    val todayGymSession = gymSessions.firstOrNull { it.date == todayStr }
+
+    val todaySuppLog = supplementLogs.firstOrNull { it.date == todayStr } ?: SupplementLog(date = todayStr)
+
+    val lastNightSleep = sleepLogs.firstOrNull() // Chronological desc, so first is most recent
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        item {
+            val formattedDate = SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(Date())
+            PageHeader(
+                title = "Aujourd'hui",
+                subtitle = formattedDate
+            )
+        }
+
+        // --- SECTION IA GEMINI ---
+        item {
+            OperationsCard(borderAccent = true) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "Gemini",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "ANALYSE GEMINI DU JOUR",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic,
+                                letterSpacing = 1.sp
+                            )
+                        }
+
+                        if (hasApiKey && !isLoadingAnalysis) {
+                            IconButton(
+                                onClick = { viewModel.generateGeminiAnalysis() },
+                                modifier = Modifier.size(24.dp).testTag("refresh_analysis")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh",
+                                    tint = MediumGray,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (!hasApiKey) {
+                        Text(
+                            text = "Configurez votre clé API Gemini dans les Paramètres pour activer l'analyse quotidienne de vos indicateurs de performance.",
+                            fontSize = 13.sp,
+                            color = MediumGray
+                        )
+                    } else if (isLoadingAnalysis) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = GoldClassic, strokeWidth = 2.5.dp)
+                        }
+                    } else if (!analysisError.isNullOrEmpty()) {
+                        Text(
+                            text = analysisError ?: "",
+                            fontSize = 13.sp,
+                            color = Color(0xFFC62828)
+                        )
+                    } else if (geminiAnalysis.isNotEmpty()) {
+                        Text(
+                            text = geminiAnalysis,
+                            fontSize = 14.sp,
+                            color = Anthracite,
+                            lineHeight = 20.sp
+                        )
+                    } else {
+                        Text(
+                            text = "Aucune analyse générée aujourd'hui. Cliquez sur le bouton de rafraîchissement pour lancer l'analyse croisée de vos données.",
+                            fontSize = 13.sp,
+                            color = MediumGray
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- CARTE AUJOURD'HUI ---
+        item {
+            OperationsCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Tâches en cours",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        Box(
+                            modifier = Modifier
+                                .background(LightBeige, RoundedCornerShape(12.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "${remainingTasks.size} restantes",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (nextTask != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onNavigateToPage(1) }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(GoldClassic, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = nextTask.title,
+                                    fontSize = 13.sp,
+                                    color = Anthracite,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                if (nextTask.time != null) {
+                                    Text(
+                                        text = "Aujourd'hui à ${nextTask.time}",
+                                        fontSize = 11.sp,
+                                        color = MediumGray
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Toutes les tâches d'aujourd'hui sont accomplies.",
+                            fontSize = 13.sp,
+                            color = MediumGray
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- CARTE COMPLÉMENTS ---
+        item {
+            OperationsCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Compléments du jour",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        Text(
+                            text = "Voir tout",
+                            fontSize = 12.sp,
+                            color = GoldClassic,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.clickable { onNavigateToPage(3) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val listSupps = listOf(
+                        "Créatine Pure" to ("creatine" to todaySuppLog.creatine),
+                        "Oméga-3" to ("omega3" to todaySuppLog.omega3),
+                        "Magnésium" to ("magnesium" to todaySuppLog.magnesium),
+                        "Ashwagandha" to ("ashwagandha" to todaySuppLog.ashwagandha),
+                        "Tongkat Ali" to ("tongkatAli" to todaySuppLog.tongkatAli)
+                    )
+
+                    listSupps.forEach { (label, data) ->
+                        val (key, taken) = data
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = label, fontSize = 13.sp, color = Anthracite)
+                            Checkbox(
+                                checked = taken,
+                                onCheckedChange = { viewModel.toggleSupplement(key, it) },
+                                colors = CheckboxDefaults.colors(checkedColor = GoldClassic),
+                                modifier = Modifier.scale(0.85f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- CARTE GYM ---
+        item {
+            OperationsCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Séance GYM",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (todayGymSession != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = todayGymSession.name,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Anthracite
+                                )
+                                Text(
+                                    text = "Prévu à ${todayGymSession.time} • ${todayGymSession.durationMinutes} min",
+                                    fontSize = 11.sp,
+                                    color = MediumGray
+                                )
+                                if (todayGymSession.muscleGroups.isNotEmpty()) {
+                                    Text(
+                                        text = todayGymSession.muscleGroups,
+                                        fontSize = 11.sp,
+                                        color = GoldClassic,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Default.FitnessCenter,
+                                contentDescription = "Gym",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Repos aujourd'hui",
+                                fontSize = 13.sp,
+                                color = MediumGray
+                            )
+                            Icon(
+                                imageVector = Icons.Default.Hotel,
+                                contentDescription = "Rest",
+                                tint = MediumGray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- CARTE SOMMEIL ---
+        item {
+            OperationsCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Sommeil de la nuit dernière",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (lastNightSleep != null) {
+                        val hours = lastNightSleep.durationHours
+                        val pct = (hours / 8f).coerceIn(0f, 1f)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${String.format("%.1f", hours)}h enregistrées",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Anthracite
+                                )
+                                Text(
+                                    text = "Coucher: ${lastNightSleep.bedtime} • Lever: ${lastNightSleep.waketime}",
+                                    fontSize = 11.sp,
+                                    color = MediumGray
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                LinearProgressIndicator(
+                                    progress = { pct },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = GoldClassic,
+                                    trackColor = LightGrayDivider,
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .background(LightBeige, CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.NightsStay,
+                                    contentDescription = "Sleep",
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Aucun sommeil enregistré pour la nuit dernière.",
+                            fontSize = 13.sp,
+                            color = MediumGray
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// --- SCREEN 2: TO-DO LIST ---
+
+@Composable
+fun TodoListPage(viewModel: OperationsViewModel) {
+    val tasks by viewModel.tasks.collectAsState()
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    val todayStr = viewModel.getTodayDate()
+
+    val (completedTasks, pendingTasks) = tasks.partition { it.done }
+
+    var isCompletedCollapsed by remember { mutableStateOf(true) }
+
+    Scaffold(
+        containerColor = WhitePure,
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = GoldClassic,
+                contentColor = Color.White,
+                shape = CircleShape,
+                modifier = Modifier.testTag("add_task_fab")
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Task")
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 16.dp)
+        ) {
+            item {
+                PageHeader(
+                    title = "To-Do List",
+                    subtitle = "Gérez vos objectifs quotidiens et stratégiques"
+                )
+            }
+
+            if (pendingTasks.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "All Done",
+                                tint = LightGrayDivider,
+                                modifier = Modifier.size(60.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Aucune tâche en attente",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MediumGray
+                            )
+                            Text(
+                                text = "Cliquez sur '+' pour planifier votre journée.",
+                                fontSize = 12.sp,
+                                color = MediumGray
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(pendingTasks, key = { it.id }) { task ->
+                    TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                }
+            }
+
+            if (completedTasks.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isCompletedCollapsed = !isCompletedCollapsed }
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Tâches terminées (${completedTasks.size})",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MediumGray
+                        )
+                        Icon(
+                            imageVector = if (isCompletedCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Collapse/Expand",
+                            tint = MediumGray
+                        )
+                    }
+                }
+
+                if (!isCompletedCollapsed) {
+                    items(completedTasks, key = { it.id }) { task ->
+                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    }
+                }
+            }
+        }
+
+        if (showAddDialog) {
+            AddTaskDialog(
+                todayStr = todayStr,
+                onDismiss = { showAddDialog = false },
+                onAdd = { title, desc, priority, date, time, category ->
+                    viewModel.addTask(title, desc, priority, date, time, category)
+                    showAddDialog = false
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun TaskRow(task: Task, onToggle: () -> Unit, onDelete: () -> Unit) {
+    val priorityColor = when (task.priority) {
+        "HAUTE" -> GoldClassic
+        "MOYENNE" -> MediumGray
+        else -> LightGrayDivider
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(WhitePure)
+            .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = task.done,
+            onCheckedChange = { onToggle() },
+            colors = CheckboxDefaults.colors(checkedColor = GoldClassic)
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(priorityColor, CircleShape)
+        )
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = task.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (task.done) MediumGray else Anthracite,
+                textDecoration = if (task.done) TextDecoration.LineThrough else TextDecoration.None
+            )
+            if (task.description.isNotEmpty()) {
+                Text(
+                    text = task.description,
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(LightBeige, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = task.category.uppercase(),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+                }
+
+                if (task.time != null) {
+                    Text(
+                        text = "${task.date} à ${task.time}",
+                        fontSize = 10.sp,
+                        color = MediumGray
+                    )
+                } else {
+                    Text(
+                        text = task.date,
+                        fontSize = 10.sp,
+                        color = MediumGray
+                    )
+                }
+            }
+        }
+
+        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Delete",
+                tint = Color(0xFFC62828).copy(alpha = 0.7f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun AddTaskDialog(
+    todayStr: String,
+    onDismiss: () -> Unit,
+    onAdd: (String, String, String, String, String?, String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var priority by remember { mutableStateOf("MOYENNE") }
+    var category by remember { mutableStateOf("perso") }
+    var date by remember { mutableStateOf(todayStr) }
+    var hasTime by remember { mutableStateOf(false) }
+    var timeHour by remember { mutableStateOf("09") }
+    var timeMinute by remember { mutableStateOf("00") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Ajouter une Tâche",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Titre", fontSize = 12.sp) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldClassic,
+                        unfocusedBorderColor = LightGrayDivider
+                    ),
+                    modifier = Modifier.fillMaxWidth().testTag("task_title_input")
+                )
+
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description (optionnelle)", fontSize = 12.sp) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldClassic,
+                        unfocusedBorderColor = LightGrayDivider
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Priority Selection
+                Column {
+                    Text("Priorité", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("HAUTE", "MOYENNE", "BASSE").forEach { p ->
+                            val isSelected = priority == p
+                            val color = when (p) {
+                                "HAUTE" -> GoldClassic
+                                "MOYENNE" -> MediumGray
+                                else -> Color(0xFFDCDCDC)
+                            }
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { priority = p },
+                                label = { Text(p, fontSize = 11.sp) },
+                                leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(color, CircleShape)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LightBeige,
+                                    selectedLabelColor = GoldClassic
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Category Selection
+                Column {
+                    Text("Catégorie", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("perso", "travail", "santé").forEach { cat ->
+                            val isSelected = category == cat
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { category = cat },
+                                label = { Text(cat.uppercase(), fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LightBeige,
+                                    selectedLabelColor = GoldClassic
+                                )
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = date,
+                    onValueChange = { date = it },
+                    label = { Text("Date (YYYY-MM-DD)", fontSize = 12.sp) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldClassic,
+                        unfocusedBorderColor = LightGrayDivider
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = hasTime,
+                        onCheckedChange = { hasTime = it },
+                        colors = CheckboxDefaults.colors(checkedColor = GoldClassic)
+                    )
+                    Text("Définir une heure précise", fontSize = 12.sp, color = Anthracite)
+                }
+
+                if (hasTime) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = timeHour,
+                            onValueChange = { if (it.length <= 2) timeHour = it },
+                            label = { Text("HH", fontSize = 11.sp) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.width(64.dp)
+                        )
+                        Text(":", fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = timeMinute,
+                            onValueChange = { if (it.length <= 2) timeMinute = it },
+                            label = { Text("MM", fontSize = 11.sp) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.width(64.dp)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Annuler", color = MediumGray)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    GoldGradientButton(
+                        text = "Ajouter",
+                        onClick = {
+                            if (title.isNotEmpty()) {
+                                val finalTime = if (hasTime) "$timeHour:$timeMinute" else null
+                                onAdd(title, description, priority, date, finalTime, category)
+                            }
+                        },
+                        enabled = title.isNotEmpty(),
+                        testTag = "save_task_button"
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+// --- SCREEN 3: CALENDRIER ---
+
+@Composable
+fun CalendrierPage(viewModel: OperationsViewModel) {
+    val tasks by viewModel.tasks.collectAsState()
+    val gymSessions by viewModel.gymSessions.collectAsState()
+
+    var viewMode by remember { mutableStateOf("Semaine") } // "Semaine", "Jour", "Mois"
+
+    val calendar = remember { Calendar.getInstance() }
+    var currentWeekStart by remember { mutableStateOf(Date()) }
+
+    // Initialize to current week start
+    LaunchedEffect(Unit) {
+        calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
+        currentWeekStart = calendar.time
+    }
+
+    val sdfDisplay = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
+
+    val sdfDb = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+
+    // Calculate the 7 days of the currently selected week
+    val weekDays = remember(currentWeekStart) {
+        val list = mutableListOf<Date>()
+        val cal = Calendar.getInstance()
+        cal.time = currentWeekStart
+        for (i in 0..6) {
+            list.add(cal.time)
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        list
+    }
+
+    // Modal/Detail State
+    var selectedEvent by remember { mutableStateOf<Any?>(null) } // Can be Task or GymSession
+    var clickedEmptySlotTime by remember { mutableStateOf<Pair<String, String>?>(null) } // Pair(Date, HH:MM)
+    var showAddTaskDialogByCalendar by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "Calendrier",
+            subtitle = "Planification hebdomadaire des opérations"
+        )
+
+        // Navigation and View switcher
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Week changer
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance()
+                    cal.time = currentWeekStart
+                    cal.add(Calendar.WEEK_OF_YEAR, -1)
+                    currentWeekStart = cal.time
+                }) {
+                    Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Prev", tint = GoldClassic)
+                }
+                Text(
+                    text = "Semaine du ${SimpleDateFormat("dd/MM", Locale.getDefault()).format(weekDays.first())}",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance()
+                    cal.time = currentWeekStart
+                    cal.add(Calendar.WEEK_OF_YEAR, 1)
+                    currentWeekStart = cal.time
+                }) {
+                    Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Next", tint = GoldClassic)
+                }
+            }
+
+            // Simple switcher
+            Row(
+                modifier = Modifier
+                    .background(LightBeige, RoundedCornerShape(12.dp))
+                    .padding(2.dp)
+            ) {
+                listOf("Semaine", "Jour").forEach { mode ->
+                    val isSel = viewMode == mode
+                    Box(
+                        modifier = Modifier
+                            .background(if (isSel) GoldClassic else Color.Transparent, RoundedCornerShape(10.dp))
+                            .clickable { viewMode = mode }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = mode,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSel) Color.White else MediumGray
+                        )
+                    }
+                }
+            }
+        }
+
+        if (viewMode == "Jour") {
+            // Day View - Today's events
+            val todayDateStr = viewModel.getTodayDate()
+            val dayTasks = tasks.filter { it.date == todayDateStr && it.time != null }
+            val dayGym = gymSessions.filter { it.date == todayDateStr }
+
+            Text("Aujourd'hui (${todayDateStr})", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+
+            if (dayTasks.isEmpty() && dayGym.isEmpty()) {
+                Text("Aucun événement prévu aujourd'hui.", fontSize = 12.sp, color = MediumGray, modifier = Modifier.padding(vertical = 20.dp))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    dayGym.forEach { gym ->
+                        GymEventCard(gym) { selectedEvent = gym }
+                    }
+                    dayTasks.forEach { task ->
+                        TaskEventCard(task) { selectedEvent = task }
+                    }
+                }
+            }
+        } else {
+            // Week Grid View
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+                    .background(WhitePure)
+                    .padding(8.dp)
+            ) {
+                // Header row of days
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.width(50.dp)) // Time column offset
+                    weekDays.forEach { date ->
+                        val dayLabel = viewModel.getDayOfWeekLabel(sdfDb.format(date))
+                        val dayNum = SimpleDateFormat("d", Locale.getDefault()).format(date)
+                        val isToday = sdfDb.format(date) == viewModel.getTodayDate()
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = dayLabel,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isToday) GoldClassic else MediumGray
+                            )
+                            Text(
+                                text = dayNum,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isToday) GoldClassic else Anthracite
+                            )
+                        }
+                    }
+                }
+
+                Divider(color = LightGrayDivider)
+
+                // Simple grid with select hours (e.g., 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00)
+                val hours = listOf("08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00")
+                hours.forEach { hour ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Time label
+                        Text(
+                            text = hour,
+                            fontSize = 10.sp,
+                            color = MediumGray,
+                            modifier = Modifier.width(50.dp),
+                            textAlign = TextAlign.Center
+                        )
+
+                        // 7 Day Slots
+                        weekDays.forEach { date ->
+                            val dateStr = sdfDb.format(date)
+                            val hourPrefix = hour.substring(0, 2)
+
+                            // Find task in this hour
+                            val hourTask = tasks.firstOrNull {
+                                it.date == dateStr && it.time != null && it.time.startsWith(hourPrefix)
+                            }
+                            val hourGym = gymSessions.firstOrNull {
+                                it.date == dateStr && it.time.startsWith(hourPrefix)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .border(0.5.dp, LightGrayDivider.copy(alpha = 0.5f))
+                                    .clickable {
+                                        if (hourGym != null) {
+                                            selectedEvent = hourGym
+                                        } else if (hourTask != null) {
+                                            selectedEvent = hourTask
+                                        } else {
+                                            clickedEmptySlotTime = Pair(dateStr, hour)
+                                            showAddTaskDialogByCalendar = true
+                                        }
+                                    }
+                                    .padding(2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (hourGym != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(LightBeige, RoundedCornerShape(4.dp))
+                                            .border(1.dp, GoldClassic, RoundedCornerShape(4.dp))
+                                            .padding(2.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FitnessCenter,
+                                            contentDescription = "Gym",
+                                            tint = GoldClassic,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                } else if (hourTask != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(GoldPale, RoundedCornerShape(4.dp))
+                                            .border(1.dp, GoldClassic.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                            .padding(2.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = hourTask.title,
+                                            fontSize = 7.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = GoldClassic,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Event details modal/sheet
+        if (selectedEvent != null) {
+            val ev = selectedEvent
+            Dialog(onDismissRequest = { selectedEvent = null }) {
+                OperationsCard(borderAccent = true) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Détails de l'Événement",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+
+                        if (ev is GymSession) {
+                            Text(text = "SÉANCE GYM", fontSize = 11.sp, color = GoldClassic, fontWeight = FontWeight.Bold)
+                            Text(text = ev.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                            Text(text = "Date : ${ev.date} à ${ev.time}", fontSize = 13.sp, color = Anthracite)
+                            Text(text = "Durée : ${ev.durationMinutes} min", fontSize = 13.sp, color = Anthracite)
+                            if (ev.muscleGroups.isNotEmpty()) {
+                                Text(text = "Groupes ciblés : ${ev.muscleGroups}", fontSize = 13.sp, color = Anthracite)
+                            }
+                            if (ev.notes.isNotEmpty()) {
+                                Text(text = "Notes : ${ev.notes}", fontSize = 12.sp, color = MediumGray)
+                            }
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = {
+                                    viewModel.deleteGymSession(ev.id)
+                                    selectedEvent = null
+                                }) {
+                                    Text("Supprimer", color = Color(0xFFC62828))
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                GoldGradientButton(text = "Fermer", onClick = { selectedEvent = null })
+                            }
+                        } else if (ev is Task) {
+                            Text(text = "TÂCHE", fontSize = 11.sp, color = GoldClassic, fontWeight = FontWeight.Bold)
+                            Text(text = ev.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                            Text(text = "Date : ${ev.date} à ${ev.time ?: "Non spécifié"}", fontSize = 13.sp, color = Anthracite)
+                            Text(text = "Priorité : ${ev.priority}", fontSize = 13.sp, color = Anthracite)
+                            Text(text = "Catégorie : ${ev.category.uppercase()}", fontSize = 13.sp, color = Anthracite)
+                            if (ev.description.isNotEmpty()) {
+                                Text(text = "Description : ${ev.description}", fontSize = 12.sp, color = MediumGray)
+                            }
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = {
+                                    viewModel.deleteTask(ev.id)
+                                    selectedEvent = null
+                                }) {
+                                    Text("Supprimer", color = Color(0xFFC62828))
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                GoldGradientButton(text = "Fermer", onClick = { selectedEvent = null })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Dialog to add task directly from clicking calendar empty slot
+        if (showAddTaskDialogByCalendar && clickedEmptySlotTime != null) {
+            val (clickDate, clickHour) = clickedEmptySlotTime!!
+            val h = clickHour.substring(0, 2)
+            val m = clickHour.substring(3, 5)
+
+            Dialog(onDismissRequest = { showAddTaskDialogByCalendar = false }) {
+                OperationsCard {
+                    var title by remember { mutableStateOf("") }
+                    var desc by remember { mutableStateOf("") }
+                    var priority by remember { mutableStateOf("MOYENNE") }
+                    var category by remember { mutableStateOf("perso") }
+
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Ajouter à ${clickHour} le ${clickDate}",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("Titre", fontSize = 12.sp) },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldClassic,
+                                unfocusedBorderColor = LightGrayDivider
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = desc,
+                            onValueChange = { desc = it },
+                            label = { Text("Description (optionnelle)", fontSize = 12.sp) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldClassic,
+                                unfocusedBorderColor = LightGrayDivider
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { showAddTaskDialogByCalendar = false }) {
+                                Text("Annuler", color = MediumGray)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            GoldGradientButton(
+                                text = "Ajouter",
+                                onClick = {
+                                    if (title.isNotEmpty()) {
+                                        viewModel.addTask(title, desc, priority, clickDate, "$h:$m", category)
+                                        showAddTaskDialogByCalendar = false
+                                    }
+                                },
+                                enabled = title.isNotEmpty()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GymEventCard(gym: GymSession, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .background(LightBeige, RoundedCornerShape(12.dp))
+            .border(1.dp, GoldClassic, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(text = "SÉANCE GYM", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+            Text(text = gym.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+            Text(text = "À ${gym.time} • ${gym.durationMinutes} min", fontSize = 11.sp, color = MediumGray)
+        }
+        Icon(imageVector = Icons.Default.FitnessCenter, contentDescription = "Gym", tint = GoldClassic)
+    }
+}
+
+@Composable
+fun TaskEventCard(task: Task, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .background(GoldPale, RoundedCornerShape(12.dp))
+            .border(1.dp, GoldClassic.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(text = "TÂCHE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+            Text(text = task.title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+            Text(text = "Prévu à ${task.time} • Priorité: ${task.priority}", fontSize = 11.sp, color = MediumGray)
+        }
+        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Task", tint = GoldClassic.copy(alpha = 0.7f))
+    }
+}
+
+
+// --- SCREEN 4: COMPLÉMENTS ALIMENTAIRES ---
+
+@Composable
+fun ComplementsPage(viewModel: OperationsViewModel) {
+    val supplementLogs by viewModel.supplementLogs.collectAsState()
+    val todayStr = viewModel.getTodayDate()
+    val todayLog = supplementLogs.firstOrNull { it.date == todayStr } ?: SupplementLog(date = todayStr)
+
+    val listSupplements = listOf(
+        SupplementInfo(
+            name = "Créatine Pure",
+            moment = "Après l'entraînement (ou avec un repas, régularité prioritaire)",
+            justification = "L'effet est cumulatif — la régularité quotidienne compte plus que l'heure exacte.",
+            key = "creatine",
+            taken = todayLog.creatine
+        ),
+        SupplementInfo(
+            name = "Oméga-3 (Fish Oil)",
+            moment = "Avec un repas contenant un peu de gras (matin ou midi)",
+            justification = "Améliore l'absorption des acides gras liposolubles.",
+            key = "omega3",
+            taken = todayLog.omega3
+        ),
+        SupplementInfo(
+            name = "Magnésium",
+            moment = "Soir, 30-60 min avant le coucher",
+            justification = "Effet relaxant sur le système nerveux, favorise un sommeil profond.",
+            key = "magnesium",
+            taken = todayLog.magnesium
+        ),
+        SupplementInfo(
+            name = "Ashwagandha",
+            moment = "Soir (ou matin+soir si dose divisée)",
+            justification = "Adaptogène anti-cortisol, soutient la récupération nocturne et réduit le stress chronique.",
+            key = "ashwagandha",
+            taken = todayLog.ashwagandha
+        ),
+        SupplementInfo(
+            name = "Tongkat Ali",
+            moment = "Matin, à jeun",
+            justification = "Soutient la testostérone libre naturellement, effet légèrement stimulant à éviter le soir.",
+            key = "tongkatAli",
+            taken = todayLog.tongkatAli
+        )
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "Compléments",
+            subtitle = "Protocole d'optimisation biologique quotidien"
+        )
+
+        // --- GRID D'HISTORIQUE 7 JOURS ---
+        Text(
+            text = "Historique hebdomadaire",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Generate last 7 days dates
+                val cal = Calendar.getInstance()
+                val last7Days = remember {
+                    val list = mutableListOf<String>()
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                    for (i in 6 downTo 0) {
+                        val c = Calendar.getInstance()
+                        c.add(Calendar.DAY_OF_YEAR, -i)
+                        list.add(sdf.format(c.time))
+                    }
+                    list
+                }
+
+                // Days headers row
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text(text = "Complément", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
+                    last7Days.forEach { date ->
+                        val label = viewModel.getDayOfWeekLabel(date)
+                        Text(
+                            text = label,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (date == todayStr) GoldClassic else MediumGray,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val keysList = listOf("creatine", "omega3", "magnesium", "ashwagandha", "tongkatAli")
+                val labelsList = listOf("Créatine", "Oméga-3", "Magnésium", "Ashwa", "Tongkat")
+
+                keysList.forEachIndexed { idx, key ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = labelsList[idx], fontSize = 11.sp, color = Anthracite, modifier = Modifier.width(100.dp))
+
+                        last7Days.forEach { date ->
+                            val dateLog = supplementLogs.firstOrNull { it.date == date }
+                            val taken = when (key) {
+                                "creatine" -> dateLog?.creatine == true
+                                "omega3" -> dateLog?.omega3 == true
+                                "magnesium" -> dateLog?.magnesium == true
+                                "ashwagandha" -> dateLog?.ashwagandha == true
+                                "tongkatAli" -> dateLog?.tongkatAli == true
+                                else -> false
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .size(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(
+                                            if (taken) GoldClassic else Color(0xFFF0F0F0),
+                                            CircleShape
+                                        )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // --- PROTOCOLE DÉTAILLÉ ---
+        Text(
+            text = "Fiches d'optimisation scientifique",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        listSupplements.forEach { info ->
+            OperationsCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = info.name,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Timing : ${info.moment}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = GoldClassic
+                            )
+                        }
+                        Checkbox(
+                            checked = info.taken,
+                            onCheckedChange = { viewModel.toggleSupplement(info.key, it) },
+                            colors = CheckboxDefaults.colors(checkedColor = GoldClassic)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = info.justification,
+                        fontSize = 12.sp,
+                        color = MediumGray,
+                        style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                    )
+                }
+            }
+        }
+    }
+}
+
+data class SupplementInfo(
+    val name: String,
+    val moment: String,
+    val justification: String,
+    val key: String,
+    val taken: Boolean
+)
+
+
+// --- SCREEN 5: GYM (SPORT) ---
+
+@Composable
+fun GymPage(viewModel: OperationsViewModel) {
+    val gymSessions by viewModel.gymSessions.collectAsState()
+    val todayStr = viewModel.getTodayDate()
+
+    var showAddForm by remember { mutableStateOf(false) }
+
+    // Form inputs
+    var name by remember { mutableStateOf("") }
+    var time by remember { mutableStateOf("08:00") }
+    var date by remember { mutableStateOf(todayStr) }
+    var duration by remember { mutableStateOf("60") }
+    var notes by remember { mutableStateOf("") }
+
+    val muscleGroupsAvailable = listOf("Push", "Pull", "Legs", "Full Body", "Cardio", "Autre")
+    val selectedMuscleGroups = remember { mutableStateListOf<String>() }
+
+    // Basic stats calculations
+    val cal = Calendar.getInstance()
+    val sessionsThisWeek = remember(gymSessions) {
+        gymSessions.filter {
+            // Very simple week calculation
+            val dateSdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            try {
+                val d = dateSdf.parse(it.date)
+                val diff = Date().time - d.time
+                diff < (7 * 24 * 60 * 60 * 1000)
+            } catch (e: Exception) {
+                false
+            }
+        }.size
+    }
+
+    val sessionsThisMonth = remember(gymSessions) {
+        gymSessions.filter {
+            it.date.startsWith(todayStr.substring(0, 7))
+        }.size
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "GYM",
+            subtitle = "Planification et suivi de votre renforcement athlétique",
+            action = {
+                GoldGradientButton(
+                    text = if (showAddForm) "Fermer" else "Nouvelle séance",
+                    onClick = { showAddForm = !showAddForm },
+                    testTag = "gym_form_toggle"
+                )
+            }
+        )
+
+        // --- STATS SIMPLE CARDS ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OperationsCard(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Sessions cette semaine", fontSize = 11.sp, color = MediumGray)
+                    Text("$sessionsThisWeek", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                }
+            }
+            OperationsCard(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Sessions ce mois", fontSize = 11.sp, color = MediumGray)
+                    Text("$sessionsThisMonth", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                }
+            }
+        }
+
+        // --- ADD SEANCE FORM ---
+        AnimatedVisibility(visible = showAddForm) {
+            OperationsCard(borderAccent = true) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Enregistrer une Séance", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Nom de la séance (ex: Bench Day)", fontSize = 12.sp) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                        modifier = Modifier.fillMaxWidth().testTag("gym_name_input")
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = date,
+                            onValueChange = { date = it },
+                            label = { Text("Date (YYYY-MM-DD)", fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = time,
+                            onValueChange = { time = it },
+                            label = { Text("Heure (HH:MM)", fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = duration,
+                        onValueChange = { duration = it },
+                        label = { Text("Durée estimée (minutes)", fontSize = 12.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Muscle selection
+                    Column {
+                        Text("Groupes musculaires ciblés", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            muscleGroupsAvailable.forEach { grp ->
+                                val isSel = selectedMuscleGroups.contains(grp)
+                                FilterChip(
+                                    selected = isSel,
+                                    onClick = {
+                                        if (isSel) selectedMuscleGroups.remove(grp) else selectedMuscleGroups.add(grp)
+                                    },
+                                    label = { Text(grp, fontSize = 10.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LightBeige,
+                                        selectedLabelColor = GoldClassic
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Notes optionnelles (Séries / Reps / Charges)", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    GoldGradientButton(
+                        text = "Enregistrer la séance",
+                        onClick = {
+                            if (name.isNotEmpty()) {
+                                viewModel.addGymSession(
+                                    name,
+                                    date,
+                                    time,
+                                    duration.toIntOrNull() ?: 60,
+                                    selectedMuscleGroups.toList(),
+                                    notes
+                                )
+                                // Reset form
+                                name = ""
+                                notes = ""
+                                selectedMuscleGroups.clear()
+                                showAddForm = false
+                            }
+                        },
+                        enabled = name.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth().testTag("gym_save_button")
+                    )
+                }
+            }
+        }
+
+        // --- HISTORIQUE DES SÉANCES ---
+        Text(
+            text = "Historique des séances",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        if (gymSessions.isEmpty()) {
+            Text(
+                text = "Aucune séance de sport enregistrée pour le moment.",
+                fontSize = 12.sp,
+                color = MediumGray,
+                modifier = Modifier.padding(vertical = 12.dp)
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                gymSessions.forEach { sess ->
+                    OperationsCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = sess.name,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Anthracite
+                                )
+                                Text(
+                                    text = "Le ${sess.date} à ${sess.time} • ${sess.durationMinutes} minutes",
+                                    fontSize = 11.sp,
+                                    color = MediumGray
+                                )
+                                if (sess.muscleGroups.isNotEmpty()) {
+                                    Text(
+                                        text = sess.muscleGroups,
+                                        fontSize = 11.sp,
+                                        color = GoldClassic,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                if (sess.notes.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = sess.notes,
+                                        fontSize = 11.sp,
+                                        color = MediumGray
+                                    )
+                                }
+                            }
+
+                            IconButton(onClick = { viewModel.deleteGymSession(sess.id) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = Color(0xFFC62828).copy(alpha = 0.7f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// --- SCREEN 6: RÉCUPÉRATION (PAGE PRINCIPALE ET RICHE) ---
+
+@Composable
+fun RecoveryPage(viewModel: OperationsViewModel) {
+    val recoveryStreaks by viewModel.recoveryStreaks.collectAsState()
+    val currentStreak = viewModel.calculateCurrentStreak()
+
+    // Kegel states
+    val kegelLogs by viewModel.kegelLogs.collectAsState()
+    val todayStr = viewModel.getTodayDate()
+    val todayKegelLog = kegelLogs.firstOrNull { it.date == todayStr } ?: KegelLog(date = todayStr)
+
+    // Breathing states
+    val breathingSessions by viewModel.breathingSessions.collectAsState()
+
+    // Journal states
+    val journalEntries by viewModel.journalEntries.collectAsState()
+
+    var activeTab by remember { mutableStateOf("Streak") } // "Streak", "Kegel", "Respiration", "Stop-Start", "Journal"
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "Récupération",
+            subtitle = "Régénération nerveuse, hormonale et musculaire globale"
+        )
+
+        // Horizontal tabs inside a card
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .background(LightGrayBg, RoundedCornerShape(12.dp))
+                .padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            listOf("Streak", "Kegel", "Respiration", "Stop-Start", "Journal").forEach { tab ->
+                val isSel = activeTab == tab
+                Box(
+                    modifier = Modifier
+                        .background(if (isSel) GoldClassic else Color.Transparent, RoundedCornerShape(10.dp))
+                        .clickable { activeTab = tab }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = tab,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSel) Color.White else MediumGray
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        when (activeTab) {
+            "Streak" -> StreakSection(currentStreak, recoveryStreaks) { viewModel.resetRecoveryStreak() }
+            "Kegel" -> KegelSection(viewModel, todayKegelLog.done, kegelLogs.size)
+            "Respiration" -> RespirationSection(viewModel, breathingSessions.size)
+            "Stop-Start" -> StopStartSection()
+            "Journal" -> JournalSection(viewModel, journalEntries)
+        }
+    }
+}
+
+@Composable
+fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset: () -> Unit) {
+    var showConfirmReset by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Goal progression
+        OperationsCard(borderAccent = true) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = "Objectif Régénération : 180 Jours",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Progression sur 6 mois pour un reset complet du système nerveux.",
+                    fontSize = 12.sp,
+                    color = MediumGray
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val pct = (currentStreak / 180f).coerceIn(0f, 1f)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Jour $currentStreak / 180",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+                    Text(
+                        text = "${String.format("%.1f", pct * 100)}%",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LinearProgressIndicator(
+                    progress = { pct },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = GoldClassic,
+                    trackColor = LightGrayDivider
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = { showConfirmReset = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828).copy(alpha = 0.08f)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.align(Alignment.End).testTag("reset_streak_button")
+                ) {
+                    Text("Réinitialiser le Streak", color = Color(0xFFC62828), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Streak History Curve / Graph using Canvas
+        if (pastStreaks.size >= 2) {
+            Text("Courbe d'évolution des streaks", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+            OperationsCard {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .padding(16.dp)
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val width = size.width
+                        val height = size.height
+
+                        val maxStreak = pastStreaks.maxOf { it.days }.toFloat().coerceAtLeast(5f)
+                        val pointsCount = pastStreaks.size
+                        val stepX = width / (pointsCount - 1).coerceAtLeast(1)
+
+                        val path = Path()
+                        pastStreaks.asReversed().forEachIndexed { idx, streak ->
+                            val x = idx * stepX
+                            val y = height - (streak.days.toFloat() / maxStreak * height)
+                            if (idx == 0) {
+                                path.moveTo(x, y)
+                            } else {
+                                path.lineTo(x, y)
+                            }
+                            // Draw point
+                            drawCircle(color = GoldClassic, radius = 4.dp.toPx(), center = Offset(x, y))
+                        }
+
+                        drawPath(
+                            path = path,
+                            color = GoldClassic,
+                            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Past streaks list
+        Text("Historique des streaks précédents", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+        if (pastStreaks.isEmpty()) {
+            Text("Aucune réinitialisation enregistrée. Restez fort !", fontSize = 12.sp, color = MediumGray)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                pastStreaks.forEach { streak ->
+                    OperationsCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = streak.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                            Text(text = "${streak.days} jours (Fin le ${streak.endDate})", fontSize = 12.sp, color = MediumGray)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showConfirmReset) {
+            AlertDialog(
+                onDismissRequest = { showConfirmReset = false },
+                title = { Text("Confirmer la réinitialisation") },
+                text = { Text("Cette action enregistrera votre streak actuel de $currentStreak jours dans votre historique et relancera un nouveau streak à partir d'aujourd'hui. Aucun jugement, chaque jour est une opportunité.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onReset()
+                        showConfirmReset = false
+                    }) {
+                        Text("Confirmer", color = Color(0xFFC62828))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmReset = false }) {
+                        Text("Annuler")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalSessions: Int) {
+    var repsConfig by remember { mutableStateOf(10) }
+    var variantConfig by remember { mutableStateOf("Standard") } // "Standard", "Rapides", "Longues"
+
+    val isRunning by viewModel.kegelIsRunning.collectAsState()
+    val currentRep by viewModel.kegelRepCount.collectAsState()
+    val isContracting by viewModel.kegelIsContracting.collectAsState()
+    val secondsLeft by viewModel.kegelSecondsLeft.collectAsState()
+
+    val scaleValue = remember { Animatable(1f) }
+
+    LaunchedEffect(isContracting, isRunning) {
+        if (isRunning) {
+            if (isContracting) {
+                scaleValue.animateTo(
+                    targetValue = 1.3f,
+                    animationSpec = tween(durationMillis = 1000, easing = LinearOutSlowInEasing)
+                )
+            } else {
+                scaleValue.animateTo(
+                    targetValue = 0.9f,
+                    animationSpec = tween(durationMillis = 1000, easing = LinearOutSlowInEasing)
+                )
+            }
+        } else {
+            scaleValue.animateTo(1f)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Routine details card
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Section Kegel — Routine Plancher Pelvien",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Renforcement du muscle pubo-coccygien (PC) pour améliorer la régulation nerveuse.",
+                    fontSize = 12.sp,
+                    color = MediumGray
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Total sessions complétées : $totalSessions", fontSize = 12.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Fait aujourd'hui", fontSize = 11.sp, color = MediumGray)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Checkbox(
+                            checked = isTodayChecked,
+                            onCheckedChange = { viewModel.toggleSupplement("kegel", it) }, // simple reuse or custom, but we check/uncheck
+                            colors = CheckboxDefaults.colors(checkedColor = GoldClassic),
+                            enabled = false // Managed via completing the routine
+                        )
+                    }
+                }
+            }
+        }
+
+        // Timer GUI Card
+        OperationsCard(borderAccent = isRunning) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (!isRunning) {
+                    Text("Lancer une séance guidée", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+
+                    // Config reps
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Répétitions : $repsConfig", fontSize = 12.sp)
+                        Slider(
+                            value = repsConfig.toFloat(),
+                            onValueChange = { repsConfig = it.toInt() },
+                            valueRange = 10f..15f,
+                            steps = 5,
+                            modifier = Modifier.width(160.dp),
+                            colors = SliderDefaults.colors(thumbColor = GoldClassic, activeTrackColor = GoldClassic)
+                        )
+                    }
+
+                    // Config variant
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Variante :", fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("Standard", "Rapides", "Longues").forEach { v ->
+                                val isS = variantConfig == v
+                                Box(
+                                    modifier = Modifier
+                                        .background(if (isS) LightBeige else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (isS) GoldClassic else LightGrayDivider, RoundedCornerShape(8.dp))
+                                        .clickable { variantConfig = v }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(v, fontSize = 10.sp, color = if (isS) GoldClassic else MediumGray, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    GoldGradientButton(
+                        text = "Commencer la routine",
+                        onClick = { viewModel.startKegelTimer(repsConfig, variantConfig) },
+                        modifier = Modifier.fillMaxWidth().testTag("start_kegel_button")
+                    )
+                } else {
+                    // Running state guided circle
+                    Text(
+                        text = "Répétition $currentRep sur $repsConfig",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(160.dp)
+                            .graphicsLayer {
+                                scaleX = scaleValue.value
+                                scaleY = scaleValue.value
+                            }
+                            .background(
+                                color = if (isContracting) GoldClassic.copy(alpha = 0.15f) else Color(0xFFF5F5F5),
+                                shape = CircleShape
+                            )
+                            .border(2.dp, if (isContracting) GoldClassic else MediumGray, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (isContracting) "CONTRACTER" else "RELACHER",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isContracting) GoldClassic else MediumGray
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${secondsLeft}s",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Anthracite
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { viewModel.stopKegelTimer() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Arrêter la séance", color = Color.White)
+                    }
+                }
+            }
+        }
+
+        // Scientific Info Card
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Notice Médicale", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Le muscle pubo-coccygien (PC) soutient la vessie et contrôle le flux éjaculatoire. Son renforcement progressif par contractions rythmiques améliore notablement le contrôle nerveux en quelques semaines de pratique régulière.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun RespirationSection(viewModel: OperationsViewModel, totalSessions: Int) {
+    var durationMinutes by remember { mutableStateOf(5) }
+
+    val isRunning by viewModel.breathingIsRunning.collectAsState()
+    val state by viewModel.breathingState.collectAsState()
+    val secondsLeft by viewModel.breathingSecondsLeft.collectAsState()
+    val totalElapsed by viewModel.breathingTotalSecondsElapsed.collectAsState()
+
+    val scaleValue = remember { Animatable(1f) }
+
+    LaunchedEffect(state, isRunning) {
+        if (isRunning) {
+            when (state) {
+                "IN" -> scaleValue.animateTo(1.4f, animationSpec = tween(durationMillis = 4000, easing = LinearEasing))
+                "HOLD" -> { /* Stays large */ }
+                "OUT" -> scaleValue.animateTo(0.9f, animationSpec = tween(durationMillis = 6000, easing = LinearEasing))
+            }
+        } else {
+            scaleValue.animateTo(1f)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Respiration Profonde — Cohérence Cardiaque",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Régulez le système nerveux autonome (baisse du cortisol, réduction du stress).",
+                    fontSize = 12.sp,
+                    color = MediumGray
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Total sessions complétées : $totalSessions", fontSize = 12.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        OperationsCard(borderAccent = isRunning) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (!isRunning) {
+                    Text("Lancer une séance guidée", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Durée : $durationMinutes minutes", fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(3, 5, 10).forEach { m ->
+                                val isS = durationMinutes == m
+                                Box(
+                                    modifier = Modifier
+                                        .background(if (isS) LightBeige else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (isS) GoldClassic else LightGrayDivider, RoundedCornerShape(8.dp))
+                                        .clickable { durationMinutes = m }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("${m}min", fontSize = 11.sp, color = if (isS) GoldClassic else MediumGray, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    GoldGradientButton(
+                        text = "Commencer la cohérence cardiaque",
+                        onClick = { viewModel.startBreathingTimer(durationMinutes) },
+                        modifier = Modifier.fillMaxWidth().testTag("start_breathing_button")
+                    )
+                } else {
+                    // Running guided breathing UI
+                    val currentCycleLabel = when (state) {
+                        "IN" -> "INSPIRER (ventre gonflé)"
+                        "HOLD" -> "RETENIR L'AIR"
+                        "OUT" -> "EXPIRER lentement"
+                        else -> ""
+                    }
+
+                    val formattedElapsed = "${totalElapsed / 60}:${String.format("%02d", totalElapsed % 60)}"
+                    Text(
+                        text = "Temps écoulé : $formattedElapsed / ${durationMinutes}:00",
+                        fontSize = 13.sp,
+                        color = MediumGray
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(160.dp)
+                            .graphicsLayer {
+                                scaleX = scaleValue.value
+                                scaleY = scaleValue.value
+                            }
+                            .background(
+                                color = when (state) {
+                                    "IN" -> GoldClassic.copy(alpha = 0.2f)
+                                    "HOLD" -> GoldClassic.copy(alpha = 0.12f)
+                                    else -> Color(0xFFEBEBEB)
+                                },
+                                shape = CircleShape
+                            )
+                            .border(2.dp, GoldClassic, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = currentCycleLabel,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "${secondsLeft}s",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Anthracite
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { viewModel.stopBreathingTimer() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Arrêter la séance", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StopStartSection() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Technique Clinique : Stop-Start",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "La technique Stop-Start est la référence clinique en thérapie sexuelle pour rééduquer la réponse éjaculatoire.",
+                    fontSize = 12.sp,
+                    color = MediumGray,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Protocole d'Entraînement", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                Divider(color = LightGrayDivider)
+
+                Text(
+                    text = "1. Phase d'Éveil : Pratiquez une stimulation graduelle de manière calme et isolée.",
+                    fontSize = 11.sp,
+                    color = Anthracite,
+                    lineHeight = 16.sp
+                )
+                Text(
+                    text = "2. Identification du Seuil : Repérez la montée d'excitation et arrêtez immédiatement tout mouvement avant d'atteindre le point de non-retour.",
+                    fontSize = 11.sp,
+                    color = Anthracite,
+                    lineHeight = 16.sp
+                )
+                Text(
+                    text = "3. Pause Nerveuse : Contractez le muscle PC (Kegel) doucement pendant la pause pour canaliser l'afflux d'énergie et redescendre de 3 points sur votre échelle interne.",
+                    fontSize = 11.sp,
+                    color = Anthracite,
+                    lineHeight = 16.sp
+                )
+                Text(
+                    text = "4. Répétition : Répétez le cycle 3 à 4 fois par session avant d'interrompre complètement. Cette régulation progressive reconditionne vos circuits nerveux sur 6 mois.",
+                    fontSize = 11.sp,
+                    color = Anthracite,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun JournalSection(viewModel: OperationsViewModel, pastEntries: List<JournalEntry>) {
+    var journalText by remember { mutableStateOf("") }
+    var stressVal by remember { mutableFloatStateOf(5f) }
+    var tensionVal by remember { mutableFloatStateOf(5f) }
+    var motivationVal by remember { mutableFloatStateOf(5f) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Journal entry form
+        OperationsCard(borderAccent = true) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Comment vous sentez-vous aujourd'hui ?", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+
+                OutlinedTextField(
+                    value = journalText,
+                    onValueChange = { journalText = it },
+                    placeholder = { Text("Notez vos observations nerveuses, hormonales et physiques...", fontSize = 12.sp) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                    modifier = Modifier.fillMaxWidth().height(100.dp).testTag("journal_notes_input")
+                )
+
+                // Stress slider
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Niveau de Stress", fontSize = 11.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+                        Text("${stressVal.toInt()}/10", fontSize = 11.sp, color = GoldClassic, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = stressVal,
+                        onValueChange = { stressVal = it },
+                        valueRange = 1f..10f,
+                        steps = 9,
+                        colors = SliderDefaults.colors(thumbColor = GoldClassic, activeTrackColor = GoldClassic)
+                    )
+                }
+
+                // Tension slider
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Tension Corporelle", fontSize = 11.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+                        Text("${tensionVal.toInt()}/10", fontSize = 11.sp, color = GoldClassic, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = tensionVal,
+                        onValueChange = { tensionVal = it },
+                        valueRange = 1f..10f,
+                        steps = 9,
+                        colors = SliderDefaults.colors(thumbColor = GoldClassic, activeTrackColor = GoldClassic)
+                    )
+                }
+
+                // Motivation slider
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Motivation & Énergie", fontSize = 11.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+                        Text("${motivationVal.toInt()}/10", fontSize = 11.sp, color = GoldClassic, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = motivationVal,
+                        onValueChange = { motivationVal = it },
+                        valueRange = 1f..10f,
+                        steps = 9,
+                        colors = SliderDefaults.colors(thumbColor = GoldClassic, activeTrackColor = GoldClassic)
+                    )
+                }
+
+                GoldGradientButton(
+                    text = "Sauvegarder l'entrée",
+                    onClick = {
+                        viewModel.saveJournalEntry(
+                            journalText,
+                            stressVal.toInt(),
+                            tensionVal.toInt(),
+                            motivationVal.toInt()
+                        )
+                        journalText = ""
+                        stressVal = 5f
+                        tensionVal = 5f
+                        motivationVal = 5f
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("save_journal_button")
+                )
+            }
+        }
+
+        // Past entries list
+        Text("Entrées précédentes", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+        if (pastEntries.isEmpty()) {
+            Text("Aucune entrée enregistrée.", fontSize = 12.sp, color = MediumGray)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                pastEntries.forEach { entry ->
+                    OperationsCard {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(text = entry.date, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Stress: ${entry.stress}", fontSize = 10.sp, color = MediumGray)
+                                    Text("Tension: ${entry.tension}", fontSize = 10.sp, color = MediumGray)
+                                    Text("Motiv: ${entry.motivation}", fontSize = 10.sp, color = MediumGray)
+                                }
+                            }
+                            if (entry.text.isNotEmpty()) {
+                                Text(text = entry.text, fontSize = 12.sp, color = Anthracite)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// --- SCREEN 7: SOMMEIL ---
+
+@Composable
+fun SommeilPage(viewModel: OperationsViewModel) {
+    val sleepLogs by viewModel.sleepLogs.collectAsState()
+
+    var bedHour by remember { mutableStateOf("22") }
+    var bedMin by remember { mutableStateOf("30") }
+    var wakeHour by remember { mutableStateOf("07") }
+    var wakeMin by remember { mutableStateOf("00") }
+
+    val avgSleep = remember(sleepLogs) {
+        if (sleepLogs.isNotEmpty()) sleepLogs.map { it.durationHours }.average() else 0.0
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "Sommeil",
+            subtitle = "Restructuration biologique nocturne"
+        )
+
+        // Average stats card
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Moyenne de sommeil", fontSize = 11.sp, color = MediumGray)
+                Text(
+                    text = "${String.format("%.1f", avgSleep)} heures / nuit",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Objectif recommandé : 7.5 - 8.0 heures", fontSize = 11.sp, color = MediumGray)
+            }
+        }
+
+        // Add Sleep Log Form Card
+        OperationsCard(borderAccent = true) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Enregistrer une nuit", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Heure de Coucher", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = bedHour,
+                                onValueChange = { if (it.length <= 2) bedHour = it },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f).testTag("bed_hour_input")
+                            )
+                            Text(":", modifier = Modifier.padding(horizontal = 4.dp))
+                            OutlinedTextField(
+                                value = bedMin,
+                                onValueChange = { if (it.length <= 2) bedMin = it },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Heure de Réveil", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = wakeHour,
+                                onValueChange = { if (it.length <= 2) wakeHour = it },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f).testTag("wake_hour_input")
+                            )
+                            Text(":", modifier = Modifier.padding(horizontal = 4.dp))
+                            OutlinedTextField(
+                                value = wakeMin,
+                                onValueChange = { if (it.length <= 2) wakeMin = it },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                GoldGradientButton(
+                    text = "Valider la nuit",
+                    onClick = {
+                        val bedH = bedHour.toIntOrNull() ?: 22
+                        val bedM = bedMin.toIntOrNull() ?: 30
+                        val wakeH = wakeHour.toIntOrNull() ?: 7
+                        val wakeM = wakeMin.toIntOrNull() ?: 0
+
+                        // Calculate sleep duration float hours
+                        var totalMin = (wakeH * 60 + wakeM) - (bedH * 60 + bedM)
+                        if (totalMin < 0) {
+                            totalMin += 24 * 60 // Crossover midnight
+                        }
+                        val finalHours = totalMin / 60f
+
+                        viewModel.addSleepLog(
+                            "$bedHour:$bedMin",
+                            "$wakeHour:$wakeMin",
+                            finalHours
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("save_sleep_button")
+                )
+            }
+        }
+
+        // Sleep chart using custom Canvas
+        if (sleepLogs.isNotEmpty()) {
+            Text("Graphique hebdomadaire", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+            OperationsCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                    ) {
+                        val recentLogs = sleepLogs.take(7).asReversed()
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val width = size.width
+                            val height = size.height
+
+                            val barCount = 7
+                            val barWidth = 24.dp.toPx()
+                            val spacing = (width - (barCount * barWidth)) / (barCount + 1)
+
+                            // Draw goal horizontal dotted line (7.5 hours / 8.0 hours)
+                            val goalY = height - (7.5f / 10f * height)
+                            drawLine(
+                                color = GoldClassic.copy(alpha = 0.5f),
+                                start = Offset(0f, goalY),
+                                end = Offset(width, goalY),
+                                strokeWidth = 1.dp.toPx(),
+                                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                            )
+
+                            for (i in 0 until barCount) {
+                                val log = recentLogs.getOrNull(i)
+                                val x = spacing + i * (barWidth + spacing)
+                                if (log != null) {
+                                    val logH = log.durationHours
+                                    val barHeight = (logH / 10f * height).coerceIn(0f, height)
+                                    val y = height - barHeight
+
+                                    drawRoundRect(
+                                        color = GoldClassic,
+                                        topLeft = Offset(x, y),
+                                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx())
+                                    )
+                                } else {
+                                    // Empty state bar
+                                    drawRoundRect(
+                                        color = LightGrayDivider,
+                                        topLeft = Offset(x, height - 10.dp.toPx()),
+                                        size = androidx.compose.ui.geometry.Size(barWidth, 10.dp.toPx()),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx())
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Row of days
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val recentLogs = sleepLogs.take(7).asReversed()
+                        for (i in 0 until 7) {
+                            val log = recentLogs.getOrNull(i)
+                            val label = if (log != null) viewModel.getDayOfWeekLabel(log.date) else ""
+                            Text(
+                                text = label,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MediumGray,
+                                modifier = Modifier.weight(1f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Historical list
+        Text("Nuits précédentes", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+        if (sleepLogs.isEmpty()) {
+            Text("Aucune nuit enregistrée.", fontSize = 12.sp, color = MediumGray)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                sleepLogs.forEach { log ->
+                    OperationsCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(text = log.date, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                                Text(text = "Coucher: ${log.bedtime} • Réveil: ${log.waketime}", fontSize = 11.sp, color = MediumGray)
+                            }
+                            Text(
+                                text = "${String.format("%.1f", log.durationHours)} h",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// --- SCREEN 8: PARAMÈTRES ---
+
+@Composable
+fun SettingsPage(viewModel: OperationsViewModel) {
+    val apiKey by viewModel.geminiApiKey.collectAsState()
+    val notifsEnabled by viewModel.notificationsEnabled.collectAsState()
+    val soundEnabled by viewModel.soundEnabled.collectAsState()
+
+    var apiKeyInput by remember { mutableStateOf(apiKey) }
+    var showApiKey by remember { mutableStateOf(false) }
+
+    var showConfirmResetAll by remember { mutableStateOf(false) }
+
+    LaunchedEffect(apiKey) {
+        apiKeyInput = apiKey
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "Paramètres",
+            subtitle = "Configuration technique globale de votre tableau de bord"
+        )
+
+        // --- GEMINI KEY CARD ---
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Clé API Gemini", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                Text(
+                    text = "La clé API Gemini est stockée localement dans les SharedPreferences de votre appareil Android. Elle n'est jamais transmise à un serveur tiers.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                OutlinedTextField(
+                    value = apiKeyInput,
+                    onValueChange = { apiKeyInput = it },
+                    label = { Text("Clé API Gemini", fontSize = 12.sp) },
+                    visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showApiKey = !showApiKey }) {
+                            Icon(
+                                imageVector = if (showApiKey) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = "Toggle Visibility"
+                            )
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                    modifier = Modifier.fillMaxWidth().testTag("api_key_input")
+                )
+
+                GoldGradientButton(
+                    text = "Enregistrer la clé",
+                    onClick = { viewModel.updateSettings(apiKeyInput, notifsEnabled, soundEnabled) },
+                    modifier = Modifier.align(Alignment.End).testTag("save_settings_button")
+                )
+            }
+        }
+
+        // --- NOTIFICATIONS OPTIONS CARD ---
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Notifications et Alertes", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Activer les notifications natives", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Permet de recevoir les rappels de compléments, Kegel et séances de sport.", fontSize = 11.sp, color = MediumGray)
+                    }
+                    Switch(
+                        checked = notifsEnabled,
+                        onCheckedChange = { viewModel.updateSettings(apiKeyInput, it, soundEnabled) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige)
+                    )
+                }
+
+                Divider(color = LightGrayDivider)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Effets sonores", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Joue un son discret lors des notifications.", fontSize = 11.sp, color = MediumGray)
+                    }
+                    Switch(
+                        checked = soundEnabled,
+                        onCheckedChange = { viewModel.updateSettings(apiKeyInput, notifsEnabled, it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige)
+                    )
+                }
+            }
+        }
+
+        // --- RESET DATA CARD ---
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Zone de Danger", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                Text(
+                    text = "La réinitialisation supprimera définitivement toutes les données enregistrées dans votre base de données locale Room (tâches, historique de sport, sommeil, compléments et streaks). Cette opération est irréversible.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                Button(
+                    onClick = { showConfirmResetAll = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("full_reset_button")
+                ) {
+                    Text("Réinitialiser toutes les données", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (showConfirmResetAll) {
+            AlertDialog(
+                onDismissRequest = { showConfirmResetAll = false },
+                title = { Text("Confirmer la réinitialisation complète") },
+                text = { Text("Êtes-vous absolument sûr de vouloir supprimer TOUTES vos données et préférences ? Vos historiques ne pourront plus être récupérés.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.fullResetData()
+                        showConfirmResetAll = false
+                    }) {
+                        Text("Supprimer définitivement", color = Color(0xFFC62828))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmResetAll = false }) {
+                        Text("Annuler")
+                    }
+                }
+            )
+        }
+    }
+}

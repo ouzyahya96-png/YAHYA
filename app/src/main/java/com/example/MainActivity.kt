@@ -1,0 +1,248 @@
+package com.example
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModelProvider
+import com.example.data.AppDatabase
+import com.example.data.OperationsRepository
+import com.example.ui.*
+import com.example.ui.theme.*
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        // 1. Initialize DB and Repository
+        val database = AppDatabase.getDatabase(this)
+        val repository = OperationsRepository(database)
+
+        // 2. Initialize ViewModel
+        val factory = OperationsViewModelFactory(application, repository)
+        val viewModel = ViewModelProvider(this, factory)[OperationsViewModel::class.java]
+
+        // 3. Request permissions for notifications on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
+        setContent {
+            MyApplicationTheme {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = WhitePure
+                ) { innerPadding ->
+                    Box(modifier = Modifier.padding(innerPadding)) {
+                        MainAppLayout(viewModel)
+                    }
+                }
+            }
+        }
+    }
+}
+
+data class NavigationItem(
+    val label: String,
+    val activeIcon: ImageVector,
+    val inactiveIcon: ImageVector,
+    val pageIndex: Int
+)
+
+@Composable
+fun MainAppLayout(viewModel: OperationsViewModel) {
+    var selectedPageIndex by remember { mutableIntStateOf(0) }
+    var isSidebarOpen by remember { mutableStateOf(true) }
+
+    val sidebarWidth by animateDpAsState(
+        targetValue = if (isSidebarOpen) 190.dp else 64.dp,
+        label = "SidebarWidth"
+    )
+
+    val navItems = remember {
+        listOf(
+            NavigationItem("Dashboard", Icons.Filled.GridView, Icons.Outlined.GridView, 0),
+            NavigationItem("To-Do List", Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle, 1),
+            NavigationItem("Calendrier", Icons.Filled.DateRange, Icons.Outlined.DateRange, 2),
+            NavigationItem("Compléments", Icons.Filled.LocalPharmacy, Icons.Outlined.LocalPharmacy, 3),
+            NavigationItem("GYM", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter, 4),
+            NavigationItem("Récupération", Icons.Filled.FlashOn, Icons.Outlined.FlashOn, 5),
+            NavigationItem("Sommeil", Icons.Filled.NightsStay, Icons.Outlined.NightsStay, 6)
+        )
+    }
+
+    val settingsItem = remember {
+        NavigationItem("Paramètres", Icons.Filled.Settings, Icons.Outlined.Settings, 7)
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        // --- SIDEBAR NAVIGATION (LEFT) ---
+        Column(
+            modifier = Modifier
+                .width(sidebarWidth)
+                .fillMaxHeight()
+                .background(WhitePure)
+                .border(width = (0.5).dp, color = LightGrayDivider)
+        ) {
+            // Sidebar Header with Toggle button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 16.dp),
+                horizontalArrangement = if (isSidebarOpen) Arrangement.SpaceBetween else Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isSidebarOpen) {
+                    Text(
+                        text = "OPÉRATIONS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = { isSidebarOpen = !isSidebarOpen },
+                    modifier = Modifier.size(28.dp).testTag("sidebar_toggle")
+                ) {
+                    Icon(
+                        imageVector = if (isSidebarOpen) Icons.Default.ChevronLeft else Icons.Default.Menu,
+                        contentDescription = "Toggle Sidebar",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Navigation menu items
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                navItems.forEach { item ->
+                    SidebarItem(
+                        item = item,
+                        isActive = selectedPageIndex == item.pageIndex,
+                        isSidebarOpen = isSidebarOpen,
+                        onClick = { selectedPageIndex = item.pageIndex }
+                    )
+                }
+            }
+
+            // Push settings to the bottom
+            Spacer(modifier = Modifier.weight(1f))
+
+            Divider(color = LightGrayDivider, modifier = Modifier.padding(horizontal = 8.dp))
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SidebarItem(
+                item = settingsItem,
+                isActive = selectedPageIndex == settingsItem.pageIndex,
+                isSidebarOpen = isSidebarOpen,
+                onClick = { selectedPageIndex = settingsItem.pageIndex }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // --- MAIN SCREEN PANELS (RIGHT) ---
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(Color.White)
+        ) {
+            when (selectedPageIndex) {
+                0 -> DashboardPage(viewModel, onNavigateToPage = { selectedPageIndex = it })
+                1 -> TodoListPage(viewModel)
+                2 -> CalendrierPage(viewModel)
+                3 -> ComplementsPage(viewModel)
+                4 -> GymPage(viewModel)
+                5 -> RecoveryPage(viewModel)
+                6 -> SommeilPage(viewModel)
+                7 -> SettingsPage(viewModel)
+            }
+        }
+    }
+}
+
+@Composable
+fun SidebarItem(
+    item: NavigationItem,
+    isActive: Boolean,
+    isSidebarOpen: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clickable { onClick() }
+            .background(if (isActive) LightBeige else Color.Transparent),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = if (isSidebarOpen) 16.dp else 0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (isSidebarOpen) Arrangement.Start else Arrangement.Center
+        ) {
+            Icon(
+                imageVector = if (isActive) item.activeIcon else item.inactiveIcon,
+                contentDescription = item.label,
+                tint = if (isActive) GoldClassic else MediumGray,
+                modifier = Modifier.size(20.dp)
+            )
+
+            if (isSidebarOpen) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = item.label,
+                    fontSize = 12.5.sp,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isActive) GoldClassic else Anthracite,
+                    maxLines = 1
+                )
+            }
+        }
+
+        // Left-aligned gold vertical stripe indicator
+        if (isActive) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .width(3.5.dp)
+                    .fillMaxHeight()
+                    .background(GoldClassic)
+            )
+        }
+    }
+}

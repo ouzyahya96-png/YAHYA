@@ -1,0 +1,6 @@
+{
+  "name": "Directeur des Opérations",
+  "description": "Assistant de gestion de vie complet : tâches, calendrier, santé, suppléments, sport, récupération et sommeil.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
