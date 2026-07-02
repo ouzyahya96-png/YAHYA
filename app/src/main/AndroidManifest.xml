@@ -36,7 +36,19 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name="com.example.data.SunExposureReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ACTION_SUN_EXPOSURE" />
+            </intent-filter>
+        </receiver>
+
         <receiver android:name="com.example.data.WeeklyReportReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver android:name="com.example.data.DigestReceiver"
             android:enabled="true"
             android:exported="false" />
 

@@ -13,6 +13,7 @@ class OperationsRepository(private val db: AppDatabase) {
     val journalEntriesFlow: Flow<List<JournalEntry>> = db.journalEntryDao().getAllJournalEntriesFlow()
     val sleepLogsFlow: Flow<List<SleepLog>> = db.sleepLogDao().getAllSleepLogsFlow()
     val gymExercisesFlow: Flow<List<GymExercise>> = db.gymExerciseDao().getAllExercisesFlow()
+    val sunExposureLogsFlow: Flow<List<SunExposureLog>> = db.sunExposureLogDao().getAllSunExposureLogsFlow()
 
     fun getExercisesForSessionFlow(sessionId: Long): Flow<List<GymExercise>> = db.gymExerciseDao().getExercisesForSessionFlow(sessionId)
     suspend fun getExercisesForSession(sessionId: Long): List<GymExercise> = db.gymExerciseDao().getExercisesForSession(sessionId)
@@ -51,6 +52,10 @@ class OperationsRepository(private val db: AppDatabase) {
     suspend fun getSleepLogByDate(date: String): SleepLog? = db.sleepLogDao().getSleepLogByDate(date)
     suspend fun insertSleepLog(log: SleepLog) = db.sleepLogDao().insertSleepLog(log)
 
+    // Sun Exposure Logs
+    suspend fun getSunExposureLogByDate(date: String): SunExposureLog? = db.sunExposureLogDao().getSunExposureLogByDate(date)
+    suspend fun insertSunExposureLog(log: SunExposureLog) = db.sunExposureLogDao().insertSunExposureLog(log)
+
     // Clear all data (Full Reset)
     suspend fun clearAllData() {
         db.taskDao().deleteAllTasks()
@@ -62,5 +67,6 @@ class OperationsRepository(private val db: AppDatabase) {
         db.journalEntryDao().deleteAllJournalEntries()
         db.sleepLogDao().deleteAllSleepLogs()
         db.gymExerciseDao().deleteAllExercises()
+        db.sunExposureLogDao().deleteAllSunExposureLogs()
     }
 }

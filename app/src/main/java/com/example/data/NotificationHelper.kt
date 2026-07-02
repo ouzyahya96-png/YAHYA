@@ -54,6 +54,24 @@ object NotificationHelper {
         }
     }
 
+    fun queueOrSendNotification(context: Context, title: String, message: String, timeSlot: String) {
+        val sharedPrefs = context.getSharedPreferences("directeur_ops_settings", Context.MODE_PRIVATE)
+        val notificationsEnabled = sharedPrefs.getBoolean("notifications_enabled", true)
+        val digestEnabled = sharedPrefs.getBoolean("digest_mode_enabled", false)
+        val soundEnabled = sharedPrefs.getBoolean("sound_enabled", true)
+
+        if (!notificationsEnabled) return
+
+        if (!digestEnabled) {
+            triggerNotification(context, title, message, playSound = soundEnabled)
+        } else {
+            val currentQueue = sharedPrefs.getString("digest_queue_$timeSlot", "") ?: ""
+            val newQueue = if (currentQueue.isEmpty()) message else "$currentQueue|||$message"
+            sharedPrefs.edit().putString("digest_queue_$timeSlot", newQueue).apply()
+            Log.d("NotificationHelper", "Queued message for $timeSlot: $message")
+        }
+    }
+
     private fun playDiscreetSound(context: Context) {
         try {
             val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)

@@ -54,6 +54,9 @@ class OperationsViewModel(
     val gymExercises: StateFlow<List<GymExercise>> = repository.gymExercisesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val sunExposureLogs: StateFlow<List<SunExposureLog>> = repository.sunExposureLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- Settings / Preferences State ---
     private val _geminiApiKey = MutableStateFlow<String>(sharedPrefs.getString("gemini_api_key", "") ?: "")
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
@@ -63,6 +66,9 @@ class OperationsViewModel(
 
     private val _soundEnabled = MutableStateFlow(sharedPrefs.getBoolean("sound_enabled", true))
     val soundEnabled: StateFlow<Boolean> = _soundEnabled.asStateFlow()
+
+    private val _digestModeEnabled = MutableStateFlow(sharedPrefs.getBoolean("digest_mode_enabled", false))
+    val digestModeEnabled: StateFlow<Boolean> = _digestModeEnabled.asStateFlow()
 
     private val _currentStreakStart = MutableStateFlow<String>(sharedPrefs.getString("current_streak_start", "") ?: "")
     val currentStreakStart: StateFlow<String> = _currentStreakStart.asStateFlow()
@@ -145,6 +151,18 @@ class OperationsViewModel(
             _currentStreakStart.value = today
         }
         loadDailyAffirmation()
+
+        viewModelScope.launch {
+            supplementLogs.collect { logs ->
+                if (logs.isNotEmpty()) {
+                    val ashwaStreak = calculateConsecutiveDaysTaken("ashwagandha", logs)
+                    checkAndNotifyAdaptogenCycle("ashwagandha", ashwaStreak)
+                    
+                    val tongkatStreak = calculateConsecutiveDaysTaken("tongkatAli", logs)
+                    checkAndNotifyAdaptogenCycle("tongkatAli", tongkatStreak)
+                }
+            }
+        }
     }
 
     private fun loadDailyAffirmation() {
@@ -282,15 +300,51 @@ class OperationsViewModel(
 
     fun addGymExercise(sessionId: Long, exerciseName: String, sets: Int, reps: Int, weightKg: Float) {
         viewModelScope.launch(Dispatchers.IO) {
+            val previousMax = gymExercises.value
+                .filter { it.exerciseName.trim().equals(exerciseName.trim(), ignoreCase = true) }
+                .map { it.weightKg }
+                .maxOrNull() ?: 0f
+
             val exercise = GymExercise(sessionId = sessionId, exerciseName = exerciseName, sets = sets, reps = reps, weightKg = weightKg)
             repository.insertGymExercise(exercise)
+
+            if (previousMax > 0f && weightKg > previousMax) {
+                val notifsEnabled = sharedPrefs.getBoolean("notifications_enabled", true)
+                val soundEnabled = sharedPrefs.getBoolean("sound_enabled", true)
+                if (notifsEnabled) {
+                    NotificationHelper.triggerNotification(
+                        context = application,
+                        title = "🔥 Nouveau record !",
+                        message = "Félicitations ! Nouveau record pour $exerciseName : $weightKg kg !",
+                        playSound = soundEnabled
+                    )
+                }
+            }
         }
     }
 
     fun updateGymExercise(id: Long, sessionId: Long, exerciseName: String, sets: Int, reps: Int, weightKg: Float) {
         viewModelScope.launch(Dispatchers.IO) {
+            val previousMax = gymExercises.value
+                .filter { it.id != id && it.exerciseName.trim().equals(exerciseName.trim(), ignoreCase = true) }
+                .map { it.weightKg }
+                .maxOrNull() ?: 0f
+
             val exercise = GymExercise(id = id, sessionId = sessionId, exerciseName = exerciseName, sets = sets, reps = reps, weightKg = weightKg)
             repository.insertGymExercise(exercise)
+
+            if (previousMax > 0f && weightKg > previousMax) {
+                val notifsEnabled = sharedPrefs.getBoolean("notifications_enabled", true)
+                val soundEnabled = sharedPrefs.getBoolean("sound_enabled", true)
+                if (notifsEnabled) {
+                    NotificationHelper.triggerNotification(
+                        context = application,
+                        title = "🔥 Nouveau record !",
+                        message = "Félicitations ! Nouveau record pour $exerciseName : $weightKg kg !",
+                        playSound = soundEnabled
+                    )
+                }
+            }
         }
     }
 
@@ -311,6 +365,11 @@ class OperationsViewModel(
                 "magnesium" -> currentLog.copy(magnesium = isChecked)
                 "ashwagandha" -> currentLog.copy(ashwagandha = isChecked)
                 "tongkatAli" -> currentLog.copy(tongkatAli = isChecked)
+                "vitaminD3" -> currentLog.copy(vitaminD3 = isChecked)
+                "zinc" -> currentLog.copy(zinc = isChecked)
+                "lTheanine" -> currentLog.copy(lTheanine = isChecked)
+                "boron" -> currentLog.copy(boron = isChecked)
+                "lCitrulline" -> currentLog.copy(lCitrulline = isChecked)
                 else -> currentLog
             }
             repository.insertSupplementLog(updatedLog)
@@ -326,8 +385,99 @@ class OperationsViewModel(
         }
     }
 
+    fun calculateConsecutiveDaysTaken(supplementKey: String, logsList: List<SupplementLog> = supplementLogs.value): Int {
+        val logs = logsList.associateBy { it.date }
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        
+        var count = 0
+        val cal = Calendar.getInstance()
+        val todayStr = sdf.format(cal.time)
+        
+        fun isTaken(dateStr: String): Boolean {
+            val log = logs[dateStr] ?: return false
+            return when (supplementKey) {
+                "creatine" -> log.creatine
+                "omega3" -> log.omega3
+                "magnesium" -> log.magnesium
+                "ashwagandha" -> log.ashwagandha
+                "tongkatAli" -> log.tongkatAli
+                "vitaminD3" -> log.vitaminD3
+                "zinc" -> log.zinc
+                "lTheanine" -> log.lTheanine
+                "boron" -> log.boron
+                "lCitrulline" -> log.lCitrulline
+                else -> false
+            }
+        }
+        
+        val startCal = Calendar.getInstance()
+        val todayTaken = isTaken(todayStr)
+        
+        if (!todayTaken) {
+            startCal.add(Calendar.DAY_OF_YEAR, -1)
+            val yesterdayStr = sdf.format(startCal.time)
+            if (!isTaken(yesterdayStr)) {
+                return 0
+            }
+        }
+        
+        while (true) {
+            val dateStr = sdf.format(startCal.time)
+            if (isTaken(dateStr)) {
+                count++
+                startCal.add(Calendar.DAY_OF_YEAR, -1)
+            } else {
+                break
+            }
+            if (count > 1000) break
+        }
+        
+        return count
+    }
+
+    fun checkAndNotifyAdaptogenCycle(supplementKey: String, count: Int) {
+        if (supplementKey != "ashwagandha" && supplementKey != "tongkatAli") return
+        val lastNotified = sharedPrefs.getInt("${supplementKey}_last_notified_streak", 0)
+        
+        if (count >= 56) {
+            if (lastNotified < 56) {
+                val displayName = if (supplementKey == "ashwagandha") "Ashwagandha" else "Tongkat Ali"
+                val title = "Cycle Adaptogènes"
+                val message = "Ça fait 8 semaines de prise continue de $displayName. Une pause de 2-4 semaines est recommandée pour préserver l'efficacité."
+                
+                if (_notificationsEnabled.value) {
+                    NotificationHelper.triggerNotification(
+                        application,
+                        title,
+                        message,
+                        playSound = _soundEnabled.value
+                    )
+                }
+                
+                sharedPrefs.edit().putInt("${supplementKey}_last_notified_streak", count).apply()
+            }
+        } else {
+            if (lastNotified > 0) {
+                sharedPrefs.edit().putInt("${supplementKey}_last_notified_streak", 0).apply()
+            }
+        }
+    }
+
+    // --- Sun Exposure Actions ---
+    fun logSunExposure(minutes: Int) {
+        val today = getTodayDate()
+        viewModelScope.launch(Dispatchers.IO) {
+            val log = SunExposureLog(
+                date = today,
+                minutesExposed = minutes,
+                done = minutes > 0
+            )
+            repository.insertSunExposureLog(log)
+        }
+    }
+
     // --- Recovery Streak Actions ---
-    fun resetRecoveryStreak() {
+    fun resetRecoveryStreak(trigger: String? = null) {
         val today = getTodayDate()
         val start = _currentStreakStart.value
         val days = calculateCurrentStreak()
@@ -340,7 +490,8 @@ class OperationsViewModel(
                     label = "Streak #$currentCount",
                     days = days,
                     startDate = start,
-                    endDate = today
+                    endDate = today,
+                    trigger = trigger
                 )
                 repository.insertRecoveryStreak(pastStreak)
             }
@@ -503,37 +654,44 @@ class OperationsViewModel(
     }
 
     // --- Sleep Actions ---
-    fun addSleepLog(bedtime: String, waketime: String, durationHours: Float) {
+    fun addSleepLog(bedtime: String, waketime: String, durationHours: Float, quality: Int = 3) {
         val today = getTodayDate()
         viewModelScope.launch(Dispatchers.IO) {
             val log = SleepLog(
                 date = today,
                 bedtime = bedtime,
                 waketime = waketime,
-                durationHours = durationHours
+                durationHours = durationHours,
+                quality = quality
             )
             repository.insertSleepLog(log)
         }
     }
 
     // --- Settings / Paramètres ---
-    fun updateSettings(apiKey: String, notifsEnabled: Boolean, sound: Boolean) {
+    fun updateSettings(apiKey: String, notifsEnabled: Boolean, sound: Boolean, digestEnabled: Boolean) {
         sharedPrefs.edit()
             .putString("gemini_api_key", apiKey)
             .putBoolean("notifications_enabled", notifsEnabled)
             .putBoolean("sound_enabled", sound)
+            .putBoolean("digest_mode_enabled", digestEnabled)
             .apply()
 
         _geminiApiKey.value = apiKey
         _notificationsEnabled.value = notifsEnabled
         _soundEnabled.value = sound
+        _digestModeEnabled.value = digestEnabled
 
         if (notifsEnabled) {
             com.example.data.AffirmationScheduler.scheduleAll(application)
             com.example.data.WeeklyReportScheduler.schedule(application)
+            com.example.data.SunExposureScheduler.schedule(application)
+            com.example.data.DigestScheduler.scheduleAll(application)
         } else {
             com.example.data.AffirmationScheduler.cancelAll(application)
             com.example.data.WeeklyReportScheduler.cancel(application)
+            com.example.data.SunExposureScheduler.cancel(application)
+            com.example.data.DigestScheduler.cancelAll(application)
         }
     }
 

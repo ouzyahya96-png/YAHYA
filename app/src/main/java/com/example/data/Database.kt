@@ -36,7 +36,12 @@ data class SupplementLog(
     val omega3: Boolean = false,
     val magnesium: Boolean = false,
     val ashwagandha: Boolean = false,
-    val tongkatAli: Boolean = false
+    val tongkatAli: Boolean = false,
+    val vitaminD3: Boolean = false,
+    val zinc: Boolean = false,
+    val lTheanine: Boolean = false,
+    val boron: Boolean = false,
+    val lCitrulline: Boolean = false
 )
 
 @Entity(tableName = "recovery_streaks")
@@ -45,7 +50,8 @@ data class RecoveryStreak(
     val label: String, // e.g., "Streak #1"
     val days: Int,
     val startDate: String, // "YYYY-MM-DD"
-    val endDate: String // "YYYY-MM-DD"
+    val endDate: String, // "YYYY-MM-DD"
+    val trigger: String? = null
 )
 
 @Entity(tableName = "kegel_logs")
@@ -75,7 +81,8 @@ data class SleepLog(
     @PrimaryKey val date: String, // "YYYY-MM-DD"
     val bedtime: String, // "HH:MM"
     val waketime: String, // "HH:MM"
-    val durationHours: Float
+    val durationHours: Float,
+    val quality: Int = 3
 )
 
 @Entity(tableName = "gym_exercises")
@@ -86,6 +93,13 @@ data class GymExercise(
     val sets: Int,
     val reps: Int,
     val weightKg: Float
+)
+
+@Entity(tableName = "sun_exposure_logs")
+data class SunExposureLog(
+    @PrimaryKey val date: String, // "YYYY-MM-DD"
+    val minutesExposed: Int = 0,
+    val done: Boolean = false
 )
 
 
@@ -232,6 +246,21 @@ interface GymExerciseDao {
     suspend fun deleteAllExercises()
 }
 
+@Dao
+interface SunExposureLogDao {
+    @Query("SELECT * FROM sun_exposure_logs ORDER BY date DESC")
+    fun getAllSunExposureLogsFlow(): Flow<List<SunExposureLog>>
+
+    @Query("SELECT * FROM sun_exposure_logs WHERE date = :date LIMIT 1")
+    suspend fun getSunExposureLogByDate(date: String): SunExposureLog?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSunExposureLog(log: SunExposureLog)
+
+    @Query("DELETE FROM sun_exposure_logs")
+    suspend fun deleteAllSunExposureLogs()
+}
+
 
 // --- Room Database ---
 
@@ -245,9 +274,10 @@ interface GymExerciseDao {
         BreathingSession::class,
         JournalEntry::class,
         SleepLog::class,
-        GymExercise::class
+        GymExercise::class,
+        SunExposureLog::class
     ],
-    version = 3,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -260,6 +290,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun journalEntryDao(): JournalEntryDao
     abstract fun sleepLogDao(): SleepLogDao
     abstract fun gymExerciseDao(): GymExerciseDao
+    abstract fun sunExposureLogDao(): SunExposureLogDao
 
     companion object {
         @Volatile

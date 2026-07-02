@@ -11,6 +11,8 @@ class BootReceiver : BroadcastReceiver() {
             Log.d("BootReceiver", "Device booted. Rescheduling alarms.")
             AffirmationScheduler.scheduleAll(context)
             WeeklyReportScheduler.schedule(context)
+            SunExposureScheduler.schedule(context)
+            DigestScheduler.scheduleAll(context)
         }
     }
 }

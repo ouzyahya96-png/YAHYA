@@ -58,6 +58,8 @@ class MainActivity : FragmentActivity() {
         // 4. Schedule positive affirmations and weekly reports
         com.example.data.AffirmationScheduler.scheduleAll(this)
         com.example.data.WeeklyReportScheduler.schedule(this)
+        com.example.data.SunExposureScheduler.schedule(this)
+        com.example.data.DigestScheduler.scheduleAll(this)
 
         setContent {
             MyApplicationTheme {
@@ -310,12 +312,13 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
             NavigationItem("Compléments", Icons.Filled.LocalPharmacy, Icons.Outlined.LocalPharmacy, 3),
             NavigationItem("GYM", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter, 4),
             NavigationItem("Récupération", Icons.Filled.FlashOn, Icons.Outlined.FlashOn, 5),
-            NavigationItem("Sommeil", Icons.Filled.NightsStay, Icons.Outlined.NightsStay, 6)
+            NavigationItem("Testostérone", Icons.Filled.WbSunny, Icons.Outlined.WbSunny, 6),
+            NavigationItem("Sommeil", Icons.Filled.NightsStay, Icons.Outlined.NightsStay, 7)
         )
     }
 
     val settingsItem = remember {
-        NavigationItem("Paramètres", Icons.Filled.Settings, Icons.Outlined.Settings, 7)
+        NavigationItem("Paramètres", Icons.Filled.Settings, Icons.Outlined.Settings, 8)
     }
 
     Row(modifier = Modifier.fillMaxSize()) {
@@ -404,8 +407,9 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                 3 -> ComplementsPage(viewModel)
                 4 -> GymPage(viewModel)
                 5 -> RecoveryPage(viewModel)
-                6 -> SommeilPage(viewModel)
-                7 -> SettingsPage(viewModel)
+                6 -> TestosteronePage(viewModel)
+                7 -> SommeilPage(viewModel)
+                8 -> SettingsPage(viewModel)
             }
         }
     }

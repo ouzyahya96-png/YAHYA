@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -305,264 +306,344 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
             }
         }
 
-        // --- CARTE AUJOURD'HUI ---
+         // --- BLOC HERO : FATIGUE NERVEUSE ---
         item {
-            OperationsCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+            val currentRecoveryStreak = viewModel.calculateCurrentStreak()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Card 1: Recovery Streak
+                OperationsCard(
+                    modifier = Modifier.weight(1f),
+                    borderAccent = true
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Timeline,
+                            contentDescription = "Streak",
+                            tint = GoldClassic,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Tâches en cours",
-                            fontSize = 15.sp,
+                            text = "STREAK RÉCUP",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "$currentRecoveryStreak Jours",
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Anthracite
                         )
-                        Box(
-                            modifier = Modifier
-                                .background(LightBeige, RoundedCornerShape(12.dp))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                    }
+                }
+
+                // Card 2: Last Night's Sleep
+                OperationsCard(
+                    modifier = Modifier.weight(1f),
+                    borderAccent = true
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NightsStay,
+                            contentDescription = "Sleep",
+                            tint = GoldClassic,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "DERNIÈRE NUIT",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val sleepText = if (lastNightSleep != null) {
+                            "${String.format("%.1f", lastNightSleep.durationHours)} h"
+                        } else {
+                            "-- h"
+                        }
+                        Text(
+                            text = sleepText,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- GRID SECONDAIRE À 2 COLONNES ---
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // COL 1: Tâches en cours
+                OperationsCard(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${remainingTasks.size} restantes",
-                                fontSize = 11.sp,
+                                text = "Tâches",
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = GoldClassic
+                                color = Anthracite
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .background(LightBeige, RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "${remainingTasks.size} rest.",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GoldClassic
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (nextTask != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable { onNavigateToPage(1) }
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(GoldClassic, CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = nextTask.title,
+                                        fontSize = 11.sp,
+                                        color = Anthracite,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (nextTask.time != null) {
+                                        Text(
+                                            text = "${nextTask.time}",
+                                            fontSize = 9.sp,
+                                            color = MediumGray
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "Toutes les tâches sont accomplies.",
+                                fontSize = 11.sp,
+                                color = MediumGray
                             )
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                // COL 2: Séance GYM
+                OperationsCard(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+                        Text(
+                            text = "Séance GYM",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
 
-                    if (nextTask != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { onNavigateToPage(1) }
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(GoldClassic, CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = nextTask.title,
-                                    fontSize = 13.sp,
-                                    color = Anthracite,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                if (nextTask.time != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (todayGymSession != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Aujourd'hui à ${nextTask.time}",
+                                        text = todayGymSession.name,
                                         fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Anthracite,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${todayGymSession.time} • ${todayGymSession.durationMinutes} min",
+                                        fontSize = 9.sp,
                                         color = MediumGray
                                     )
                                 }
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "Toutes les tâches d'aujourd'hui sont accomplies.",
-                            fontSize = 13.sp,
-                            color = MediumGray
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- CARTE COMPLÉMENTS ---
-        item {
-            OperationsCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Compléments du jour",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Anthracite
-                        )
-                        Text(
-                            text = "Voir tout",
-                            fontSize = 12.sp,
-                            color = GoldClassic,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.clickable { onNavigateToPage(3) }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val listSupps = listOf(
-                        "Créatine Pure" to ("creatine" to todaySuppLog.creatine),
-                        "Oméga-3" to ("omega3" to todaySuppLog.omega3),
-                        "Magnésium" to ("magnesium" to todaySuppLog.magnesium),
-                        "Ashwagandha" to ("ashwagandha" to todaySuppLog.ashwagandha),
-                        "Tongkat Ali" to ("tongkatAli" to todaySuppLog.tongkatAli)
-                    )
-
-                    listSupps.forEach { (label, data) ->
-                        val (key, taken) = data
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = label, fontSize = 13.sp, color = Anthracite)
-                            Checkbox(
-                                checked = taken,
-                                onCheckedChange = { viewModel.toggleSupplement(key, it) },
-                                colors = CheckboxDefaults.colors(checkedColor = GoldClassic),
-                                modifier = Modifier.scale(0.85f)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- CARTE GYM ---
-        item {
-            OperationsCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Séance GYM",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Anthracite
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    if (todayGymSession != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = todayGymSession.name,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Anthracite
+                                Icon(
+                                    imageVector = Icons.Default.FitnessCenter,
+                                    contentDescription = "Gym",
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(16.dp)
                                 )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "Prévu à ${todayGymSession.time} • ${todayGymSession.durationMinutes} min",
+                                    text = "Repos",
                                     fontSize = 11.sp,
                                     color = MediumGray
                                 )
-                                if (todayGymSession.muscleGroups.isNotEmpty()) {
-                                    Text(
-                                        text = todayGymSession.muscleGroups,
-                                        fontSize = 11.sp,
-                                        color = GoldClassic,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.Hotel,
+                                    contentDescription = "Rest",
+                                    tint = MediumGray,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
-                            Icon(
-                                imageVector = Icons.Default.FitnessCenter,
-                                contentDescription = "Gym",
-                                tint = GoldClassic,
-                                modifier = Modifier.size(24.dp)
-                            )
                         }
-                    } else {
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // COL 3: Compléments
+                OperationsCard(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Repos aujourd'hui",
+                                text = "Compléments",
                                 fontSize = 13.sp,
-                                color = MediumGray
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
                             )
-                            Icon(
-                                imageVector = Icons.Default.Hotel,
-                                contentDescription = "Rest",
-                                tint = MediumGray,
-                                modifier = Modifier.size(20.dp)
+                            Text(
+                                text = "Voir tout",
+                                fontSize = 10.sp,
+                                color = GoldClassic,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable { onNavigateToPage(3) }
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        val listSupps = listOf(
+                            "Créatine" to ("creatine" to todaySuppLog.creatine),
+                            "Oméga-3" to ("omega3" to todaySuppLog.omega3),
+                            "Magnésium" to ("magnesium" to todaySuppLog.magnesium),
+                            "Ashwa" to ("ashwagandha" to todaySuppLog.ashwagandha),
+                            "Tongkat" to ("tongkatAli" to todaySuppLog.tongkatAli)
+                        )
+
+                        listSupps.forEach { (label, data) ->
+                            val (key, taken) = data
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 1.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = label, fontSize = 11.sp, color = Anthracite)
+                                Checkbox(
+                                    checked = taken,
+                                    onCheckedChange = { viewModel.toggleSupplement(key, it) },
+                                    colors = CheckboxDefaults.colors(checkedColor = GoldClassic),
+                                    modifier = Modifier.size(16.dp).scale(0.7f)
+                                )
+                            }
                         }
                     }
                 }
-            }
-        }
 
-        // --- CARTE SOMMEIL ---
-        item {
-            OperationsCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Sommeil de la nuit dernière",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Anthracite
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                // COL 4: Sommeil
+                OperationsCard(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+                        Text(
+                            text = "Sommeil",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                    if (lastNightSleep != null) {
-                        val hours = lastNightSleep.durationHours
-                        val pct = (hours / 8f).coerceIn(0f, 1f)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                        if (lastNightSleep != null) {
+                            val hours = lastNightSleep.durationHours
+                            val pct = (hours / 8f).coerceIn(0f, 1f)
+                            Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = "${String.format("%.1f", hours)}h enregistrées",
-                                    fontSize = 13.sp,
+                                    text = "${String.format("%.1f", hours)}h",
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = Anthracite
                                 )
                                 Text(
-                                    text = "Coucher: ${lastNightSleep.bedtime} • Lever: ${lastNightSleep.waketime}",
-                                    fontSize = 11.sp,
+                                    text = "${lastNightSleep.bedtime} - ${lastNightSleep.waketime}",
+                                    fontSize = 9.sp,
                                     color = MediumGray
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
                                 LinearProgressIndicator(
                                     progress = { pct },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp)),
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
                                     color = GoldClassic,
                                     trackColor = LightGrayDivider,
                                 )
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .background(LightBeige, CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.NightsStay,
-                                    contentDescription = "Sleep",
-                                    tint = GoldClassic,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                        } else {
+                            Text(
+                                text = "Aucun sommeil enregistré.",
+                                fontSize = 11.sp,
+                                color = MediumGray
+                            )
                         }
-                    } else {
-                        Text(
-                            text = "Aucun sommeil enregistré pour la nuit dernière.",
-                            fontSize = 13.sp,
-                            color = MediumGray
-                        )
                     }
                 }
             }
@@ -644,8 +725,69 @@ fun TodoListPage(viewModel: OperationsViewModel) {
                     }
                 }
             } else {
-                items(pendingTasks, key = { it.id }) { task ->
-                    TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                val morningTasks = pendingTasks.filter { !it.time.isNullOrEmpty() && it.time < "12:00" }
+                val afternoonTasks = pendingTasks.filter { !it.time.isNullOrEmpty() && it.time >= "12:00" && it.time < "18:00" }
+                val eveningTasks = pendingTasks.filter { !it.time.isNullOrEmpty() && it.time >= "18:00" }
+                val unscheduledTasks = pendingTasks.filter { it.time.isNullOrEmpty() }
+
+                if (morningTasks.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "MATIN",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
+                    items(morningTasks, key = { "morning_${it.id}" }) { task ->
+                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    }
+                }
+
+                if (afternoonTasks.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "APRÈS-MIDI",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
+                    items(afternoonTasks, key = { "afternoon_${it.id}" }) { task ->
+                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    }
+                }
+
+                if (eveningTasks.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "SOIR",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
+                    items(eveningTasks, key = { "evening_${it.id}" }) { task ->
+                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    }
+                }
+
+                if (unscheduledTasks.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "SANS HORAIRE",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
+                    items(unscheduledTasks, key = { "unscheduled_${it.id}" }) { task ->
+                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    }
                 }
             }
 
@@ -980,6 +1122,7 @@ fun CalendrierPage(viewModel: OperationsViewModel) {
     val gymSessions by viewModel.gymSessions.collectAsState()
 
     var viewMode by remember { mutableStateOf("Semaine") } // "Semaine", "Jour", "Mois"
+    var selectedDayStr by remember { mutableStateOf(viewModel.getTodayDate()) }
 
     val calendar = remember { Calendar.getInstance() }
     var currentWeekStart by remember { mutableStateOf(Date()) }
@@ -1080,16 +1223,85 @@ fun CalendrierPage(viewModel: OperationsViewModel) {
             }
         }
 
+        // --- COMPACT EVENT DENSITY ROW ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(LightBeige.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            weekDays.forEach { date ->
+                val dateStr = sdfDb.format(date)
+                val dayLabelShort = SimpleDateFormat("E", Locale.getDefault()).format(date).uppercase()
+                val dayNum = SimpleDateFormat("d", Locale.getDefault()).format(date)
+                val isToday = dateStr == viewModel.getTodayDate()
+                val isSelected = dateStr == selectedDayStr
+
+                val eventCount = tasks.count { it.date == dateStr } + gymSessions.count { it.date == dateStr }
+
+                Column(
+                    modifier = Modifier
+                        .clickable {
+                            selectedDayStr = dateStr
+                            viewMode = "Jour"
+                        }
+                        .padding(4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = dayLabelShort,
+                        fontSize = 9.sp,
+                        color = if (isToday) GoldClassic else MediumGray,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = dayNum,
+                        fontSize = 11.sp,
+                        color = if (isToday) GoldClassic else Anthracite,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    if (eventCount > 0) {
+                        val badgeColor = if (eventCount > 3) GoldClassic else LightGrayDivider
+                        val badgeTextColor = if (eventCount > 3) Color.White else Anthracite
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .background(badgeColor, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = eventCount.toString(),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = badgeTextColor
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .border(0.5.dp, LightGrayDivider, CircleShape)
+                        )
+                    }
+                }
+            }
+        }
+
         if (viewMode == "Jour") {
-            // Day View - Today's events
-            val todayDateStr = viewModel.getTodayDate()
+            // Day View - Selected day's events
+            val todayDateStr = selectedDayStr
             val dayTasks = tasks.filter { it.date == todayDateStr && it.time != null }
             val dayGym = gymSessions.filter { it.date == todayDateStr }
 
-            Text("Aujourd'hui (${todayDateStr})", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+            Text("Événements du ${SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(sdfDb.parse(selectedDayStr) ?: Date())}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
 
             if (dayTasks.isEmpty() && dayGym.isEmpty()) {
-                Text("Aucun événement prévu aujourd'hui.", fontSize = 12.sp, color = MediumGray, modifier = Modifier.padding(vertical = 20.dp))
+                Text("Aucun événement prévu pour cette journée.", fontSize = 12.sp, color = MediumGray, modifier = Modifier.padding(vertical = 20.dp))
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     dayGym.forEach { gym ->
@@ -1417,6 +1629,17 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
     val todayStr = viewModel.getTodayDate()
     val todayLog = supplementLogs.firstOrNull { it.date == todayStr } ?: SupplementLog(date = todayStr)
 
+    val last7Days = remember {
+        val list = mutableListOf<String>()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        for (i in 6 downTo 0) {
+            val c = Calendar.getInstance()
+            c.add(Calendar.DAY_OF_YEAR, -i)
+            list.add(sdf.format(c.time))
+        }
+        list
+    }
+
     val listSupplements = listOf(
         SupplementInfo(
             name = "Créatine Pure",
@@ -1452,6 +1675,41 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
             justification = "Soutient la testostérone libre naturellement, effet légèrement stimulant à éviter le soir.",
             key = "tongkatAli",
             taken = todayLog.tongkatAli
+        ),
+        SupplementInfo(
+            name = "Vitamine D3",
+            moment = "Matin, avec un repas contenant du gras",
+            justification = "Carence très fréquente et fortement corrélée à une testostérone basse ; l'absorption est meilleure avec des lipides.",
+            key = "vitaminD3",
+            taken = todayLog.vitaminD3
+        ),
+        SupplementInfo(
+            name = "Zinc",
+            moment = "Soir, à distance des repas riches en calcium/fibres",
+            justification = "Cofacteur essentiel de la synthèse hormonale ; une carence, même légère, impacte directement la production de testostérone.",
+            key = "zinc",
+            taken = todayLog.zinc
+        ),
+        SupplementInfo(
+            name = "L-Théanine",
+            moment = "Soir, avec Magnésium et Ashwagandha",
+            justification = "Favorise un état de calme sans somnolence ; complète la descente du système nerveux avant le coucher.",
+            key = "lTheanine",
+            taken = todayLog.lTheanine
+        ),
+        SupplementInfo(
+            name = "Bore (Boron)",
+            moment = "Matin, avec un repas",
+            justification = "Données montrant une hausse de la testostérone libre (forme active) sur plusieurs semaines d'usage régulier.",
+            key = "boron",
+            taken = todayLog.boron
+        ),
+        SupplementInfo(
+            name = "L-Citrulline",
+            moment = "30-45 min avant l'entraînement (jours GYM), sinon le matin",
+            justification = "Précurseur d'oxyde nitrique, améliore la circulation sanguine — pertinent pour la fonction érectile et l'endurance à l'effort.",
+            key = "lCitrulline",
+            taken = todayLog.lCitrulline
         )
     )
 
@@ -1468,28 +1726,46 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
         )
 
         // --- GRID D'HISTORIQUE 7 JOURS ---
-        Text(
-            text = "Historique hebdomadaire",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = Anthracite
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Historique hebdomadaire",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Anthracite
+            )
+            val completionPercent = remember(supplementLogs, last7Days) {
+                var totalTaken = 0
+                last7Days.forEach { date ->
+                    val dateLog = supplementLogs.firstOrNull { it.date == date }
+                    if (dateLog != null) {
+                        if (dateLog.creatine) totalTaken++
+                        if (dateLog.omega3) totalTaken++
+                        if (dateLog.magnesium) totalTaken++
+                        if (dateLog.ashwagandha) totalTaken++
+                        if (dateLog.tongkatAli) totalTaken++
+                        if (dateLog.vitaminD3) totalTaken++
+                        if (dateLog.zinc) totalTaken++
+                        if (dateLog.lTheanine) totalTaken++
+                        if (dateLog.boron) totalTaken++
+                        if (dateLog.lCitrulline) totalTaken++
+                    }
+                }
+                (totalTaken * 100) / 70
+            }
+            Text(
+                text = "$completionPercent% cette semaine",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = GoldClassic
+            )
+        }
 
         OperationsCard {
             Column(modifier = Modifier.padding(16.dp)) {
-                // Generate last 7 days dates
-                val cal = Calendar.getInstance()
-                val last7Days = remember {
-                    val list = mutableListOf<String>()
-                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                    for (i in 6 downTo 0) {
-                        val c = Calendar.getInstance()
-                        c.add(Calendar.DAY_OF_YEAR, -i)
-                        list.add(sdf.format(c.time))
-                    }
-                    list
-                }
-
                 // Days headers row
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(text = "Complément", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
@@ -1508,8 +1784,8 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val keysList = listOf("creatine", "omega3", "magnesium", "ashwagandha", "tongkatAli")
-                val labelsList = listOf("Créatine", "Oméga-3", "Magnésium", "Ashwa", "Tongkat")
+                val keysList = listOf("creatine", "omega3", "magnesium", "ashwagandha", "tongkatAli", "vitaminD3", "zinc", "lTheanine", "boron", "lCitrulline")
+                val labelsList = listOf("Créatine", "Oméga-3", "Magnésium", "Ashwa", "Tongkat", "Vitamine D3", "Zinc", "L-Théanine", "Bore", "Citrulline")
 
                 keysList.forEachIndexed { idx, key ->
                     Row(
@@ -1528,18 +1804,23 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
                                 "magnesium" -> dateLog?.magnesium == true
                                 "ashwagandha" -> dateLog?.ashwagandha == true
                                 "tongkatAli" -> dateLog?.tongkatAli == true
+                                "vitaminD3" -> dateLog?.vitaminD3 == true
+                                "zinc" -> dateLog?.zinc == true
+                                "lTheanine" -> dateLog?.lTheanine == true
+                                "boron" -> dateLog?.boron == true
+                                "lCitrulline" -> dateLog?.lCitrulline == true
                                 else -> false
                             }
 
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .size(16.dp),
+                                    .size(20.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(10.dp)
+                                        .size(14.dp)
                                         .background(
                                             if (taken) GoldClassic else Color(0xFFF0F0F0),
                                             CircleShape
@@ -1561,6 +1842,35 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
             fontWeight = FontWeight.Bold,
             color = Anthracite
         )
+
+        // --- MEDICAL DISCLAIMER ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(LightBeige.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                .border(width = 0.5.dp, color = LightGrayDivider, shape = RoundedCornerShape(8.dp))
+                .padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Info médicale",
+                    tint = GoldClassic,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "Avec désormais 10 compléments ciblés dans ton protocole d'optimisation complet, un avis médical est d'autant plus indispensable pour éviter toute interaction indésirable (ex. Ashwagandha avec des traitements thyroïdiens ou antidépresseurs, Magnésium avec certains antibiotiques, Bore avec des régulations hormonales).",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    style = androidx.compose.ui.text.TextStyle(lineHeight = 15.sp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         listSupplements.forEach { info ->
             OperationsCard {
@@ -1584,6 +1894,39 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
                                 fontWeight = FontWeight.Medium,
                                 color = GoldClassic
                             )
+                            if (info.key == "ashwagandha" || info.key == "tongkatAli") {
+                                val streak = viewModel.calculateConsecutiveDaysTaken(info.key)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Pris en continu depuis $streak jours",
+                                    fontSize = 11.sp,
+                                    color = MediumGray
+                                )
+                                if (streak >= 56) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier
+                                            .background(Color(0xFFFFF9E6), RoundedCornerShape(4.dp))
+                                            .border(0.5.dp, Color(0xFFFFB300), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = "Pause",
+                                            tint = Color(0xFFFFB300),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = "Pause de 2-4 semaines recommandée",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFB78103)
+                                        )
+                                    }
+                                }
+                            }
                         }
                         Checkbox(
                             checked = info.taken,
@@ -2025,6 +2368,11 @@ fun GymPage(viewModel: OperationsViewModel) {
                                     modifier = Modifier.padding(bottom = 8.dp)
                                 ) {
                                     sessExercises.forEach { ex ->
+                                        val isPR = remember(gymExercises, ex) {
+                                            val sameExerciseLogs = gymExercises.filter { it.exerciseName.trim().equals(ex.exerciseName.trim(), ignoreCase = true) }
+                                            val maxWeight = sameExerciseLogs.map { it.weightKg }.maxOrNull() ?: 0f
+                                            ex.weightKg >= maxWeight && maxWeight > 0f
+                                        }
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -2034,7 +2382,34 @@ fun GymPage(viewModel: OperationsViewModel) {
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column {
-                                                Text(ex.exerciseName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Text(ex.exerciseName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                                                    if (isPR) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier
+                                                                .background(LightBeige, shape = RoundedCornerShape(4.dp))
+                                                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Whatshot,
+                                                                contentDescription = "PR",
+                                                                tint = GoldClassic,
+                                                                modifier = Modifier.size(10.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(2.dp))
+                                                            Text(
+                                                                text = "PR",
+                                                                fontSize = 8.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = GoldClassic
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                                 Text("${ex.sets} séries x ${ex.reps} reps • ${ex.weightKg} kg", fontSize = 11.sp, color = MediumGray)
                                             }
 
@@ -2207,6 +2582,75 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
             subtitle = "Régénération nerveuse, hormonale et musculaire globale"
         )
 
+        // --- CONDENSED SUMMARY CARD ---
+        val last7Days = remember {
+            val list = mutableListOf<String>()
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            for (i in 6 downTo 0) {
+                val c = Calendar.getInstance()
+                c.add(Calendar.DAY_OF_YEAR, -i)
+                list.add(sdf.format(c.time))
+            }
+            list
+        }
+        val kegelCount7Days = remember(kegelLogs, last7Days) {
+            kegelLogs.count { it.date in last7Days }
+        }
+        val lastBreathingSession = remember(breathingSessions) {
+            breathingSessions.maxByOrNull { it.date }
+        }
+        val lastBreathingText = if (lastBreathingSession != null) {
+            "Le ${lastBreathingSession.date}"
+        } else {
+            "Aucune"
+        }
+
+        OperationsCard(borderAccent = true) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Col 1: Streak
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = "STREAK", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = "$currentStreak jours", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                }
+
+                // Divider
+                Box(modifier = Modifier.width(1.dp).height(30.dp).background(LightGrayDivider))
+
+                // Col 2: Kegel
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = "KEGEL (7J)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = "$kegelCount7Days / 7 séances", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                }
+
+                // Divider
+                Box(modifier = Modifier.width(1.dp).height(30.dp).background(LightGrayDivider))
+
+                // Col 3: Respiration
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = "RESPIRATION", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = lastBreathingText, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Anthracite, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+
         // Horizontal tabs inside a card
         Row(
             modifier = Modifier
@@ -2237,7 +2681,7 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
         Spacer(modifier = Modifier.height(4.dp))
 
         when (activeTab) {
-            "Streak" -> StreakSection(currentStreak, recoveryStreaks) { viewModel.resetRecoveryStreak() }
+            "Streak" -> StreakSection(currentStreak, recoveryStreaks) { trigger -> viewModel.resetRecoveryStreak(trigger) }
             "Kegel" -> KegelSection(viewModel, todayKegelLog.done, kegelLogs.size)
             "Respiration" -> RespirationSection(viewModel, breathingSessions.size)
             "Stop-Start" -> StopStartSection()
@@ -2247,7 +2691,7 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
 }
 
 @Composable
-fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset: () -> Unit) {
+fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset: (String?) -> Unit) {
     var showConfirmReset by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -2371,7 +2815,26 @@ fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text(text = streak.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(text = streak.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                                    if (!streak.trigger.isNullOrEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(LightBeige, RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = streak.trigger ?: "",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = GoldClassic
+                                            )
+                                        }
+                                    }
+                                }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 val dateText = if (streak.startDate.isNotEmpty()) {
                                     "Du ${streak.startDate} au ${streak.endDate}"
@@ -2393,13 +2856,49 @@ fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset
         }
 
         if (showConfirmReset) {
+            val triggers = listOf("Stress", "Ennui", "Fatigue", "Solitude", "Autre")
+            var selectedTriggerInDialog by remember { mutableStateOf<String?>(null) }
+
             AlertDialog(
                 onDismissRequest = { showConfirmReset = false },
                 title = { Text("Confirmer la réinitialisation") },
-                text = { Text("Cette action enregistrera votre streak actuel de $currentStreak jours dans votre historique et relancera un nouveau streak à partir d'aujourd'hui. Aucun jugement, chaque jour est une opportunité.") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Cette action enregistrera votre streak actuel de $currentStreak jours dans votre historique et relancera un nouveau streak à partir d'aujourd'hui. Aucun jugement, chaque jour est une opportunité.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Facteur déclencheur optionnel :", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            triggers.forEach { trig ->
+                                val isSel = selectedTriggerInDialog == trig
+                                Box(
+                                    modifier = Modifier
+                                        .background(if (isSel) GoldClassic else LightBeige.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (isSel) GoldClassic else LightGrayDivider, RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            selectedTriggerInDialog = if (isSel) null else trig
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = trig,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSel) Color.White else MediumGray
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
                 confirmButton = {
                     TextButton(onClick = {
-                        onReset()
+                        onReset(selectedTriggerInDialog)
                         showConfirmReset = false
                     }) {
                         Text("Confirmer", color = Color(0xFFC62828))
@@ -3115,14 +3614,48 @@ fun JournalSection(viewModel: OperationsViewModel, pastEntries: List<JournalEntr
 @Composable
 fun SommeilPage(viewModel: OperationsViewModel) {
     val sleepLogs by viewModel.sleepLogs.collectAsState()
+    val supplementLogs by viewModel.supplementLogs.collectAsState()
 
     var bedHour by remember { mutableStateOf("22") }
     var bedMin by remember { mutableStateOf("30") }
     var wakeHour by remember { mutableStateOf("07") }
     var wakeMin by remember { mutableStateOf("00") }
+    var selectedQuality by remember { mutableStateOf(3) }
 
     val avgSleep = remember(sleepLogs) {
         if (sleepLogs.isNotEmpty()) sleepLogs.map { it.durationHours }.average() else 0.0
+    }
+
+    val magnesiumInsight = remember(sleepLogs, supplementLogs) {
+        val withMag = mutableListOf<Float>()
+        val withoutMag = mutableListOf<Float>()
+        
+        sleepLogs.forEach { sLog ->
+            val supLog = supplementLogs.firstOrNull { it.date == sLog.date }
+            if (supLog != null && supLog.magnesium) {
+                withMag.add(sLog.durationHours)
+            } else {
+                withoutMag.add(sLog.durationHours)
+            }
+        }
+        
+        if (withMag.size >= 2 && withoutMag.size >= 2) {
+            val avgWith = withMag.average()
+            val avgWithout = withoutMag.average()
+            val diff = avgWith - avgWithout
+            
+            val comparisonText = if (diff > 0) {
+                "Vos nuits avec Magnésium durent en moyenne ${String.format("%.1f", diff)} h de plus. Cela valide l'impact du Magnésium sur l'activation du système nerveux parasympathique et la relaxation musculaire avant le coucher."
+            } else if (diff < 0) {
+                "Vos nuits avec Magnésium sont en moyenne ${String.format("%.1f", -diff)} h plus courtes, mais peuvent être plus denses. Observez votre sensation de fatigue au réveil pour valider l'impact."
+            } else {
+                "Aucune différence significative de durée constatée avec ou sans Magnésium pour le moment. La qualité subjective du sommeil reste le meilleur indicateur de récupération nerveuse."
+            }
+            
+            Triple(avgWith, avgWithout, comparisonText)
+        } else {
+            null
+        }
     }
 
     Column(
@@ -3149,6 +3682,52 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Objectif recommandé : 7.5 - 8.0 heures", fontSize = 11.sp, color = MediumGray)
+            }
+        }
+
+        // --- INSIGHT CARD ---
+        if (magnesiumInsight != null) {
+            val (avgWith, avgWithout, text) = magnesiumInsight
+            OperationsCard(borderAccent = true) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Insight Sommeil",
+                            tint = GoldClassic,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Insight Scientifique : Corrélation Magnésium",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = text,
+                        fontSize = 12.sp,
+                        color = MediumGray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Avec Magnésium", fontSize = 10.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                            Text("${String.format("%.1f", avgWith)} h", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Sans Magnésium", fontSize = 10.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                            Text("${String.format("%.1f", avgWithout)} h", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        }
+                    }
+                }
             }
         }
 
@@ -3206,6 +3785,30 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                     }
                 }
 
+                Column {
+                    Text("Qualité subjective du sommeil", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        for (star in 1..5) {
+                            val isFilled = star <= selectedQuality
+                            IconButton(
+                                onClick = { selectedQuality = star },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "$star Étoiles",
+                                    tint = if (isFilled) GoldClassic else LightGrayDivider,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 GoldGradientButton(
                     text = "Valider la nuit",
                     onClick = {
@@ -3224,7 +3827,8 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                         viewModel.addSleepLog(
                             "$bedHour:$bedMin",
                             "$wakeHour:$wakeMin",
-                            finalHours
+                            finalHours,
+                            selectedQuality
                         )
                     },
                     modifier = Modifier.fillMaxWidth().testTag("save_sleep_button")
@@ -3331,6 +3935,17 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                             Column {
                                 Text(text = log.date, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
                                 Text(text = "Coucher: ${log.bedtime} • Réveil: ${log.waketime}", fontSize = 11.sp, color = MediumGray)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    for (star in 1..5) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = null,
+                                            tint = if (star <= log.quality) GoldClassic else LightGrayDivider.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
                             }
                             Text(
                                 text = "${String.format("%.1f", log.durationHours)} h",
@@ -3354,6 +3969,7 @@ fun SettingsPage(viewModel: OperationsViewModel) {
     val apiKey by viewModel.geminiApiKey.collectAsState()
     val notifsEnabled by viewModel.notificationsEnabled.collectAsState()
     val soundEnabled by viewModel.soundEnabled.collectAsState()
+    val digestEnabled by viewModel.digestModeEnabled.collectAsState()
 
     var apiKeyInput by remember { mutableStateOf(apiKey) }
     var showApiKey by remember { mutableStateOf(false) }
@@ -3409,7 +4025,7 @@ fun SettingsPage(viewModel: OperationsViewModel) {
 
                 GoldGradientButton(
                     text = "Enregistrer la clé",
-                    onClick = { viewModel.updateSettings(apiKeyInput, notifsEnabled, soundEnabled) },
+                    onClick = { viewModel.updateSettings(apiKeyInput, notifsEnabled, soundEnabled, digestEnabled) },
                     modifier = Modifier.align(Alignment.End).testTag("save_settings_button")
                 )
             }
@@ -3551,7 +4167,7 @@ fun SettingsPage(viewModel: OperationsViewModel) {
                     }
                     Switch(
                         checked = notifsEnabled,
-                        onCheckedChange = { viewModel.updateSettings(apiKeyInput, it, soundEnabled) },
+                        onCheckedChange = { viewModel.updateSettings(apiKeyInput, it, soundEnabled, digestEnabled) },
                         colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige)
                     )
                 }
@@ -3569,8 +4185,27 @@ fun SettingsPage(viewModel: OperationsViewModel) {
                     }
                     Switch(
                         checked = soundEnabled,
-                        onCheckedChange = { viewModel.updateSettings(apiKeyInput, notifsEnabled, it) },
+                        onCheckedChange = { viewModel.updateSettings(apiKeyInput, notifsEnabled, it, digestEnabled) },
                         colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige)
+                    )
+                }
+
+                Divider(color = LightGrayDivider)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Mode Digest", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Regroupe les rappels de la même tranche horaire en une seule notification au lieu de plusieurs.", fontSize = 11.sp, color = MediumGray)
+                    }
+                    Switch(
+                        checked = digestEnabled,
+                        onCheckedChange = { viewModel.updateSettings(apiKeyInput, notifsEnabled, soundEnabled, it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige),
+                        modifier = Modifier.testTag("digest_mode_switch")
                     )
                 }
             }
@@ -3816,3 +4451,501 @@ fun SettingsPage(viewModel: OperationsViewModel) {
         }
     }
 }
+
+@Composable
+fun TestosteronePage(viewModel: OperationsViewModel) {
+    val sunExposureLogs by viewModel.sunExposureLogs.collectAsState()
+    val sleepLogs by viewModel.sleepLogs.collectAsState()
+    val gymSessions by viewModel.gymSessions.collectAsState()
+    val journalEntries by viewModel.journalEntries.collectAsState()
+    val supplementLogs by viewModel.supplementLogs.collectAsState()
+
+    val todayStr = viewModel.getTodayDate()
+    val todaySunLog = sunExposureLogs.firstOrNull { it.date == todayStr } ?: SunExposureLog(date = todayStr)
+
+    val last7Days = remember {
+        val list = mutableListOf<String>()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        for (i in 6 downTo 0) {
+            val c = Calendar.getInstance()
+            c.add(Calendar.DAY_OF_YEAR, -i)
+            list.add(sdf.format(c.time))
+        }
+        list
+    }
+
+    var selectedMinutes by remember { mutableStateOf(15) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "Testostérone",
+            subtitle = "Suivi des leviers biologiques de la vitalité"
+        )
+
+        // --- BANDEAU D'AVERTISSEMENT SCIENTIFIQUE ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(LightBeige, RoundedCornerShape(10.dp))
+                .border(width = 0.5.dp, color = LightGrayDivider, shape = RoundedCornerShape(10.dp))
+                .padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Avertissement",
+                    tint = GoldClassic,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "Cette page suit tes habitudes de vie favorables à une production hormonale saine. Elle ne remplace pas une analyse médicale — seule une prise de sang (testostérone totale + libre, le matin à jeun) donne un chiffre réel.",
+                    fontSize = 12.sp,
+                    color = Anthracite,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        // --- SECTION 1 : EXPOSITION SOLEIL MATINAL ---
+        Text(
+            text = "Exposition Solaire Matinale",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                if (todaySunLog.done) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(LightBeige, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Enregistré",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "Dose de soleil enregistrée pour aujourd'hui",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                            Text(
+                                text = "Durée : ${todaySunLog.minutesExposed} minutes",
+                                fontSize = 11.sp,
+                                color = MediumGray
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Enregistrer la dose de soleil d'aujourd'hui",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Sélectionne la durée d'exposition :",
+                        fontSize = 11.sp,
+                        color = MediumGray
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val durationOptions = listOf(
+                            "5-10 min" to 10,
+                            "10-20 min" to 15,
+                            "20-30 min" to 25,
+                            "30 min+" to 45
+                        )
+                        durationOptions.forEach { (label, minutes) ->
+                            val isSelected = selectedMinutes == minutes
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(
+                                        if (isSelected) LightBeige else Color(0xFFF9F9F9),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isSelected) GoldClassic else LightGrayDivider,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { selectedMinutes = minutes }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) GoldClassic else Anthracite
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = { viewModel.logSunExposure(selectedMinutes) },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "J'ai pris ma dose de soleil",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = LightGrayDivider)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Grille historique 7 jours
+                Text(
+                    text = "Suivi des 7 derniers jours :",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    last7Days.forEach { date ->
+                        val label = viewModel.getDayOfWeekLabel(date)
+                        val dateLog = sunExposureLogs.firstOrNull { it.date == date }
+                        val isDone = dateLog?.done == true
+                        val minutes = dateLog?.minutesExposed ?: 0
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 9.sp,
+                                color = if (date == todayStr) GoldClassic else MediumGray,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(
+                                        if (isDone) GoldClassic else Color(0xFFF0F0F0),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isDone) {
+                                    Text(
+                                        text = "${minutes}m",
+                                        fontSize = 8.sp,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(MediumGray.copy(alpha = 0.5f), CircleShape)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "💡 La lumière naturelle du matin cale l'horloge circadienne, qui régule directement le pic matinal de testostérone et de cortisol.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+
+        // --- SECTION 2 : APERÇU DES LEVIERS DE LA SEMAINE ---
+        Text(
+            text = "Fiche Diagnostic Hebdomadaire",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        val indicators = remember(sleepLogs, gymSessions, journalEntries, sunExposureLogs, supplementLogs, last7Days) {
+            // 1. Sleep avg
+            val recentSleeps = sleepLogs.filter { it.date in last7Days }
+            val avgSleep = if (recentSleeps.isNotEmpty()) recentSleeps.map { it.durationHours }.sum() / recentSleeps.size else 0f
+            val sleepOk = avgSleep >= 7.0f
+
+            // 2. Gym count
+            val gymCount = gymSessions.count { it.date in last7Days }
+            val gymOk = gymCount >= 3
+
+            // 3. Stress avg
+            val recentJournals = journalEntries.filter { it.date in last7Days }
+            val avgStress = if (recentJournals.isNotEmpty()) recentJournals.map { it.stress }.sum().toFloat() / recentJournals.size else 0f
+            val stressOk = avgStress <= 4f && recentJournals.isNotEmpty()
+
+            // 4. Sun count
+            val sunCount = sunExposureLogs.count { it.date in last7Days && it.done }
+            val sunOk = sunCount >= 4
+
+            // 5. Supps count (Vitamine D3 + Zinc)
+            val recentSupps = supplementLogs.filter { it.date in last7Days }
+            val vitD3Count = recentSupps.count { it.vitaminD3 }
+            val zincCount = recentSupps.count { it.zinc }
+            val suppsOk = vitD3Count >= 4 && zincCount >= 4
+
+            listOf(
+                IndicatorItem(
+                    label = "Sommeil Moyen",
+                    value = if (avgSleep > 0f) "${String.format("%.1f", avgSleep)} h / nuit" else "-- h",
+                    desc = "Cible: ≥ 7.0 h",
+                    isGood = sleepOk,
+                    icon = Icons.Default.NightsStay
+                ),
+                IndicatorItem(
+                    label = "Séances Muscu",
+                    value = "$gymCount séances",
+                    desc = "Cible: ≥ 3 par semaine",
+                    isGood = gymOk,
+                    icon = Icons.Default.FitnessCenter
+                ),
+                IndicatorItem(
+                    label = "Niveau de Stress",
+                    value = if (recentJournals.isNotEmpty()) "${String.format("%.1f", avgStress)} / 10" else "Pas de journal",
+                    desc = "Cible: ≤ 4.0 / 10",
+                    isGood = stressOk,
+                    icon = Icons.Default.Warning
+                ),
+                IndicatorItem(
+                    label = "Exposition Solaire",
+                    value = "$sunCount / 7 jours",
+                    desc = "Cible: ≥ 4 jours",
+                    isGood = sunOk,
+                    icon = Icons.Default.WbSunny
+                ),
+                IndicatorItem(
+                    label = "Vitamine D3 + Zinc",
+                    value = "D3: $vitD3Count • Zinc: $zincCount",
+                    desc = "Cible: ≥ 4 fois chacun",
+                    isGood = suppsOk,
+                    icon = Icons.Default.LocalPharmacy
+                )
+            )
+        }
+
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Aperçu de la semaine",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+
+                indicators.forEach { indicator ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(LightBeige, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = indicator.icon,
+                                    contentDescription = indicator.label,
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = indicator.label,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Anthracite
+                                )
+                                Text(
+                                    text = indicator.desc,
+                                    fontSize = 10.sp,
+                                    color = MediumGray
+                                )
+                            }
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = indicator.value,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (indicator.isGood) LightBeige else Color(0xFFF2F2F2),
+                                        RoundedCornerShape(12.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (indicator.isGood) "Optimal" else "À améliorer",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (indicator.isGood) GoldClassic else MediumGray
+                                )
+                            }
+                        }
+                    }
+                    if (indicator != indicators.last()) {
+                        Divider(color = LightGrayDivider)
+                    }
+                }
+            }
+        }
+
+        // --- SECTION 3 : LES 6 LEVIERS NATURELS (EDUCATIVE ACCORDION) ---
+        Text(
+            text = "Les 6 leviers d'optimisation naturelle",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        val leviers = remember {
+            listOf(
+                LevierItem(
+                    title = "1. Lumière naturelle du matin",
+                    content = "Une exposition à la lumière directe du soleil pendant 10 à 30 minutes au réveil cale l'horloge biologique circadienne. Cela déclenche l'arrêt de la mélatonine, régule le pic de cortisol sain du matin et favorise la libération nocturne adéquate de l'hormone lutéinisante (LH) qui signale la production de testostérone."
+                ),
+                LevierItem(
+                    title = "2. Sommeil suffisant (7-9h)",
+                    content = "La majorité de la testostérone est synthétisée durant le sommeil paradoxal (REM). Une seule semaine de restriction de sommeil à 5 heures par nuit peut faire chuter le taux de testostérone de 10 à 15 % chez les hommes sains."
+                ),
+                LevierItem(
+                    title = "3. Entraînement de force & Mouvements composés",
+                    content = "Les séances de musculation intenses (durée < 60 min) stimulant d'importantes masses musculaires (squats, soulevé de terre, tractions, développés) provoquent une réponse hormonale aiguë favorable à la testostérone et à l'hormone de croissance."
+                ),
+                LevierItem(
+                    title = "4. Contrôle du stress et cortisol",
+                    content = "Le stress chronique sécrète du cortisol. Or, le cortisol et la testostérone sont engagés dans une relation inversement proportionnelle : un taux élevé de cortisol bloque les enzymes clés de la synthèse de la testostérone dans les cellules de Leydig."
+                ),
+                LevierItem(
+                    title = "5. Apport calorique et lipidique suffisant",
+                    content = "Le cholestérol est le précurseur biochimique indispensable de toutes les hormones stéroïdiennes, dont la testostérone. Les régimes extrêmement pauvres en lipides (< 20% des calories) ou restrictifs chroniquement sapent la production hormonale."
+                ),
+                LevierItem(
+                    title = "6. Correction des carences en micronutriments",
+                    content = "La vitamine D3, le zinc et le magnésium sont des cofacteurs essentiels. Les études montrent que la supplémentation de ces micronutriments chez les sujets carencés restaure des taux physiologiques sains de testostérone libre et totale."
+                )
+            )
+        }
+
+        leviers.forEach { levier ->
+            var expanded by remember { mutableStateOf(false) }
+            OperationsCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = !expanded }
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = levier.title,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (expanded) "Réduire" else "Développer",
+                            tint = GoldClassic,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    if (expanded) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = levier.content,
+                            fontSize = 11.sp,
+                            color = MediumGray,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+data class IndicatorItem(
+    val label: String,
+    val value: String,
+    val desc: String,
+    val isGood: Boolean,
+    val icon: ImageVector
+)
+
+data class LevierItem(
+    val title: String,
+    val content: String
+)
