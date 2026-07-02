@@ -2,6 +2,9 @@ package com.example.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.content.Context
 import com.example.data.*
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
@@ -143,6 +147,7 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
     val gymSessions by viewModel.gymSessions.collectAsState()
     val supplementLogs by viewModel.supplementLogs.collectAsState()
     val sleepLogs by viewModel.sleepLogs.collectAsState()
+    val dailyAffirmation by viewModel.dailyAffirmation.collectAsState()
 
     val geminiAnalysis by viewModel.geminiAnalysis.collectAsState()
     val isLoadingAnalysis by viewModel.isLoadingAnalysis.collectAsState()
@@ -173,6 +178,49 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                 title = "Aujourd'hui",
                 subtitle = formattedDate
             )
+        }
+
+        // --- ENCART AFFIRMATION DU JOUR ---
+        item {
+            OperationsCard(borderAccent = true) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Affirmation",
+                            tint = GoldClassic,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "AFFIRMATION DU JOUR",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "« $dailyAffirmation »",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = Anthracite,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
+            }
         }
 
         // --- SECTION IA GEMINI ---
@@ -1571,9 +1619,20 @@ data class SupplementInfo(
 @Composable
 fun GymPage(viewModel: OperationsViewModel) {
     val gymSessions by viewModel.gymSessions.collectAsState()
+    val gymExercises by viewModel.gymExercises.collectAsState()
     val todayStr = viewModel.getTodayDate()
 
     var showAddForm by remember { mutableStateOf(false) }
+
+    // Exercise dialog inputs
+    var showAddExerciseDialog by remember { mutableStateOf(false) }
+    var selectedSessionIdForExercise by remember { mutableStateOf<Long?>(null) }
+    var editingExercise by remember { mutableStateOf<GymExercise?>(null) }
+
+    var exerciseNameInput by remember { mutableStateOf("") }
+    var exerciseSetsInput by remember { mutableStateOf("3") }
+    var exerciseRepsInput by remember { mutableStateOf("10") }
+    var exerciseWeightInput by remember { mutableStateOf("60") }
 
     // Form inputs
     var name by remember { mutableStateOf("") }
@@ -1749,6 +1808,148 @@ fun GymPage(viewModel: OperationsViewModel) {
             }
         }
 
+        // --- SUIVI DE CHARGE & PROGRESSION ---
+        val uniqueExerciseNames = remember(gymExercises) {
+            gymExercises.map { it.exerciseName.trim() }
+                .distinct()
+                .filter { it.isNotEmpty() }
+        }
+
+        if (uniqueExerciseNames.isNotEmpty()) {
+            var selectedChartExercise by remember(uniqueExerciseNames) {
+                mutableStateOf(uniqueExerciseNames.firstOrNull() ?: "")
+            }
+
+            val exerciseHistory = remember(gymExercises, selectedChartExercise) {
+                gymExercises.filter { it.exerciseName.trim().equals(selectedChartExercise, ignoreCase = true) }
+            }
+
+            val chartPoints = remember(exerciseHistory, gymSessions) {
+                exerciseHistory.mapNotNull { exercise ->
+                    val session = gymSessions.firstOrNull { it.id == exercise.sessionId } ?: return@mapNotNull null
+                    session.date to exercise.weightKg
+                }.sortedBy { it.first }
+            }
+
+            OperationsCard {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Suivi de Charge & Progression", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                    Text("Visualisez l'évolution de vos performances au fil des séances.", fontSize = 11.sp, color = MediumGray)
+
+                    // Selection Chips
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        uniqueExerciseNames.forEach { exName ->
+                            val isSel = exName.equals(selectedChartExercise, ignoreCase = true)
+                            FilterChip(
+                                selected = isSel,
+                                onClick = { selectedChartExercise = exName },
+                                label = { Text(exName, fontSize = 10.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LightBeige,
+                                    selectedLabelColor = GoldClassic
+                                )
+                            )
+                        }
+                    }
+
+                    if (chartPoints.isNotEmpty()) {
+                        Text(
+                            text = "Charge maximale pour $selectedChartExercise (kg)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp)
+                                .background(LightBeige.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp))
+                                .border(width = 0.5.dp, color = LightGrayDivider, shape = RoundedCornerShape(8.dp))
+                                .padding(12.dp)
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val width = size.width
+                                val height = size.height
+
+                                val weights = chartPoints.map { it.second }
+                                val minWeight = (weights.minOrNull() ?: 0f).let { if (it > 10f) it - 10f else 0f }
+                                val maxWeight = (weights.maxOrNull() ?: 100f) + 10f
+                                val weightRange = if (maxWeight - minWeight == 0f) 1f else (maxWeight - minWeight)
+
+                                val pointsCount = chartPoints.size
+                                val xStep = if (pointsCount > 1) width / (pointsCount - 1) else width
+
+                                // Grid lines
+                                val gridLines = 4
+                                for (i in 0..gridLines) {
+                                    val y = height * i / gridLines
+                                    drawLine(
+                                        color = LightGrayDivider.copy(alpha = 0.5f),
+                                        start = Offset(0f, y),
+                                        end = Offset(width, y),
+                                        strokeWidth = 1f
+                                    )
+                                }
+
+                                val path = Path()
+                                chartPoints.forEachIndexed { index, pair ->
+                                    val x = if (pointsCount > 1) index * xStep else width / 2
+                                    val y = height - ((pair.second - minWeight) / weightRange * height)
+
+                                    if (index == 0) {
+                                        path.moveTo(x, y)
+                                    } else {
+                                        path.lineTo(x, y)
+                                    }
+
+                                    // Draw point circle
+                                    drawCircle(
+                                        color = GoldClassic,
+                                        radius = 5.dp.toPx(),
+                                        center = Offset(x, y)
+                                    )
+                                    drawCircle(
+                                        color = WhitePure,
+                                        radius = 2.dp.toPx(),
+                                        center = Offset(x, y)
+                                    )
+                                }
+
+                                if (pointsCount > 1) {
+                                    drawPath(
+                                        path = path,
+                                        color = GoldClassic,
+                                        style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(chartPoints.first().first, fontSize = 9.sp, color = MediumGray)
+                            if (chartPoints.size > 1) {
+                                Text(chartPoints.last().first, fontSize = 9.sp, color = MediumGray)
+                            }
+                        }
+                    } else {
+                        Text("Données insuffisantes pour tracer la progression.", fontSize = 11.sp, color = MediumGray)
+                    }
+                }
+            }
+        }
+
         // --- HISTORIQUE DES SÉANCES ---
         Text(
             text = "Historique des séances",
@@ -1767,57 +1968,209 @@ fun GymPage(viewModel: OperationsViewModel) {
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 gymSessions.forEach { sess ->
+                    val sessExercises = gymExercises.filter { it.sessionId == sess.id }
                     OperationsCard {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = sess.name,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Anthracite
-                                )
-                                Text(
-                                    text = "Le ${sess.date} à ${sess.time} • ${sess.durationMinutes} minutes",
-                                    fontSize = 11.sp,
-                                    color = MediumGray
-                                )
-                                if (sess.muscleGroups.isNotEmpty()) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = sess.muscleGroups,
-                                        fontSize = 11.sp,
-                                        color = GoldClassic,
-                                        fontWeight = FontWeight.Medium
+                                        text = sess.name,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Anthracite
                                     )
-                                }
-                                if (sess.notes.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = sess.notes,
+                                        text = "Le ${sess.date} à ${sess.time} • ${sess.durationMinutes} minutes",
                                         fontSize = 11.sp,
                                         color = MediumGray
+                                    )
+                                    if (sess.muscleGroups.isNotEmpty()) {
+                                        Text(
+                                            text = sess.muscleGroups,
+                                            fontSize = 11.sp,
+                                            color = GoldClassic,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    if (sess.notes.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = sess.notes,
+                                            fontSize = 11.sp,
+                                            color = MediumGray
+                                        )
+                                    }
+                                }
+
+                                IconButton(onClick = { viewModel.deleteGymSession(sess.id) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete",
+                                        tint = Color(0xFFC62828).copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
 
-                            IconButton(onClick = { viewModel.deleteGymSession(sess.id) }) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = Color(0xFFC62828).copy(alpha = 0.7f),
-                                    modifier = Modifier.size(18.dp)
+                            Divider(color = LightGrayDivider, modifier = Modifier.padding(vertical = 8.dp))
+
+                            // Exercices list
+                            if (sessExercises.isNotEmpty()) {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                ) {
+                                    sessExercises.forEach { ex ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(LightBeige.copy(alpha = 0.2f), shape = RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(ex.exerciseName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                                                Text("${ex.sets} séries x ${ex.reps} reps • ${ex.weightKg} kg", fontSize = 11.sp, color = MediumGray)
+                                            }
+
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                IconButton(
+                                                    onClick = {
+                                                        editingExercise = ex
+                                                        exerciseNameInput = ex.exerciseName
+                                                        exerciseSetsInput = ex.sets.toString()
+                                                        exerciseRepsInput = ex.reps.toString()
+                                                        exerciseWeightInput = ex.weightKg.toString()
+                                                        selectedSessionIdForExercise = sess.id
+                                                        showAddExerciseDialog = true
+                                                    },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = GoldClassic, modifier = Modifier.size(14.dp))
+                                                }
+
+                                                IconButton(
+                                                    onClick = { viewModel.deleteGymExercise(ex.id) },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Close, contentDescription = "Delete", tint = Color(0xFFC62828).copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    "Aucun exercice enregistré pour cette séance.",
+                                    fontSize = 11.sp,
+                                    color = MediumGray,
+                                    modifier = Modifier.padding(bottom = 8.dp)
                                 )
+                            }
+
+                            // Small Add button
+                            TextButton(
+                                onClick = {
+                                    editingExercise = null
+                                    exerciseNameInput = ""
+                                    exerciseSetsInput = "3"
+                                    exerciseRepsInput = "10"
+                                    exerciseWeightInput = "60"
+                                    selectedSessionIdForExercise = sess.id
+                                    showAddExerciseDialog = true
+                                },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = GoldClassic, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Ajouter un exercice", color = GoldClassic, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showAddExerciseDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddExerciseDialog = false },
+            title = { Text(if (editingExercise != null) "Modifier l'exercice" else "Ajouter un exercice") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = exerciseNameInput,
+                        onValueChange = { exerciseNameInput = it },
+                        label = { Text("Nom de l'exercice (ex: Squat)") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = exerciseSetsInput,
+                            onValueChange = { exerciseSetsInput = it },
+                            label = { Text("Séries") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = exerciseRepsInput,
+                            onValueChange = { exerciseRepsInput = it },
+                            label = { Text("Reps") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = exerciseWeightInput,
+                        onValueChange = { exerciseWeightInput = it },
+                        label = { Text("Poids (kg)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val sessId = selectedSessionIdForExercise
+                        val nameEx = exerciseNameInput.trim()
+                        val sets = exerciseSetsInput.toIntOrNull() ?: 3
+                        val reps = exerciseRepsInput.toIntOrNull() ?: 10
+                        val weight = exerciseWeightInput.toFloatOrNull() ?: 60f
+
+                        if (sessId != null && nameEx.isNotEmpty()) {
+                            val editEx = editingExercise
+                            if (editEx != null) {
+                                viewModel.updateGymExercise(editEx.id, sessId, nameEx, sets, reps, weight)
+                            } else {
+                                viewModel.addGymExercise(sessId, nameEx, sets, reps, weight)
+                            }
+                            showAddExerciseDialog = false
+                        }
+                    },
+                    enabled = exerciseNameInput.isNotEmpty()
+                ) {
+                    Text("Enregistrer", color = GoldClassic, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddExerciseDialog = false }) {
+                    Text("Annuler")
+                }
+            }
+        )
     }
 }
 
@@ -2013,12 +2366,26 @@ fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(16.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = streak.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
-                            Text(text = "${streak.days} jours (Fin le ${streak.endDate})", fontSize = 12.sp, color = MediumGray)
+                            Column {
+                                Text(text = streak.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                val dateText = if (streak.startDate.isNotEmpty()) {
+                                    "Du ${streak.startDate} au ${streak.endDate}"
+                                } else {
+                                    "Fin le ${streak.endDate}"
+                                }
+                                Text(text = dateText, fontSize = 11.sp, color = MediumGray)
+                            }
+                            Text(
+                                text = "${streak.days} jours",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic
+                            )
                         }
                     }
                 }
@@ -2393,7 +2760,12 @@ fun RespirationSection(viewModel: OperationsViewModel, totalSessions: Int) {
 
 @Composable
 fun StopStartSection() {
+    var isPhase1Expanded by remember { mutableStateOf(false) }
+    var isPhase2Expanded by remember { mutableStateOf(false) }
+    var isPhase3Expanded by remember { mutableStateOf(false) }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // --- CONTEXT & REALISTIC OBJECTIVE CARD ---
         OperationsCard {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -2404,20 +2776,39 @@ fun StopStartSection() {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "La technique Stop-Start est la référence clinique en thérapie sexuelle pour rééduquer la réponse éjaculatoire.",
+                    text = "La technique Stop-Start est la référence clinique mondiale en thérapie sexuelle pour rééduquer la réponse éjaculatoire et stabiliser l'activité nerveuse.",
                     fontSize = 12.sp,
                     color = MediumGray,
                     lineHeight = 18.sp
                 )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider(color = LightGrayDivider)
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Text(
+                    text = "Objectif Réaliste & Scientifique",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "L'objectif clinique visé est de retrouver un contrôle stable et confortable (5 à 7 minutes de pénétration active), ce qui correspond à la moyenne physiologique masculine saine.\n\nLes standards diffusés par l'industrie pornographique sont totalement artificiels, irréalistes et médicalement aberrants. Se libérer de cette pression mentale est la première étape indispensable pour détendre le système nerveux et retrouver une pleine maîtrise de soi.",
+                    fontSize = 11.sp,
+                    color = Anthracite,
+                    lineHeight = 17.sp
+                )
             }
         }
 
+        // --- METHODOLOGY STEPS ---
         OperationsCard {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Protocole d'Entraînement", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                Text("Protocole d'Entraînement Clinique", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
                 Divider(color = LightGrayDivider)
 
                 Text(
@@ -2427,7 +2818,7 @@ fun StopStartSection() {
                     lineHeight = 16.sp
                 )
                 Text(
-                    text = "2. Identification du Seuil : Repérez la montée d'excitation et arrêtez immédiatement tout mouvement avant d'atteindre le point de non-retour.",
+                    text = "2. Identification du Seuil : Repérez la montée d'excitation et arrêtez immédiatement tout mouvement avant d'atteindre le point de non-retour (niveau 8/10).",
                     fontSize = 11.sp,
                     color = Anthracite,
                     lineHeight = 16.sp
@@ -2439,11 +2830,164 @@ fun StopStartSection() {
                     lineHeight = 16.sp
                 )
                 Text(
-                    text = "4. Répétition : Répétez le cycle 3 à 4 fois par session avant d'interrompre complètement. Cette régulation progressive reconditionne vos circuits nerveux sur 6 mois.",
+                    text = "4. Répétition : Répétez le cycle 3 à 4 fois par session avant d'interrompre complètement.",
                     fontSize = 11.sp,
                     color = Anthracite,
                     lineHeight = 16.sp
                 )
+            }
+        }
+
+        // --- PROGRESSIVE 6-MONTH PLAN SECTION ---
+        Text(
+            text = "Plan de Reconditionnement sur 6 Mois",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        // Phase 1 Card
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .clickable { isPhase1Expanded = !isPhase1Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Mois 1-2 : Reconditionnement de Base",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        Text(
+                            text = "Focus : Réduction du stress d'attente et éveil musculaire",
+                            fontSize = 11.sp,
+                            color = MediumGray
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isPhase1Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Expand phase 1",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (isPhase1Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Divider(color = LightGrayDivider)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "• Exercices de Kegel d'endurance : Effectuez des contractions lentes (5s de maintien, 5s de repos) pour renforcer et assouplir le plancher pelvien sans congestion.\n" +
+                               "• Respiration diaphragmatique guidée : Calmez l'activité orthosympathique (le système de l'éjaculation réflexe) en allongeant les expirations lors des moments de tension.\n" +
+                               "• Zéro stimulation forcée : Aucun entraînement Stop-Start actif. L'objectif est purement de réinitialiser le tonus de repos du système nerveux et d'éliminer la peur de l'échec.",
+                        fontSize = 11.sp,
+                        color = Anthracite,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+        }
+
+        // Phase 2 Card
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .clickable { isPhase2Expanded = !isPhase2Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Mois 2-4 : Repérage Passif",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        Text(
+                            text = "Focus : Stimulation calme et détection du seuil",
+                            fontSize = 11.sp,
+                            color = MediumGray
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isPhase2Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Expand phase 2",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (isPhase2Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Divider(color = LightGrayDivider)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "• Application calme de la technique : Pratiquez la technique Stop-Start de manière très isolée et détendue.\n" +
+                               "• Contrôle strict de l'intensité : Maintenez l'excitation à un niveau modéré (5-6/10 max). N'approchez pas le point de non-retour de manière abrupte.\n" +
+                               "• Rééducation sensitive : Concentrez-vous sur les sensations physiques précises qui précèdent la montée d'excitation afin de développer une cartographie mentale précise de votre réponse corporelle.",
+                        fontSize = 11.sp,
+                        color = Anthracite,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+        }
+
+        // Phase 3 Card
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .clickable { isPhase3Expanded = !isPhase3Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Mois 4-6 : Consolidation Active",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        Text(
+                            text = "Focus : Maîtrise des rythmes et contrôle souverain",
+                            fontSize = 11.sp,
+                            color = MediumGray
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isPhase3Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Expand phase 3",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (isPhase3Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Divider(color = LightGrayDivider)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "• Descente sous pression : Apprenez à évacuer l'influx nerveux en pleine montée d'excitation en utilisant des contractions PC brèves et légères associées à un relâchement diaphragmatique total.\n" +
+                               "• Variations de rythmes : Expérimentez des transitions lentes et dynamiques en restant sous le seuil d'éjaculation de manière stable et sereine.\n" +
+                               "• Consolidation des 5-7 minutes : Ancrez l'habitude nerveuse d'une stabilité physique durable, libérée de l'angoisse de performance, pour un contrôle confortable, naturel et souverain.",
+                        fontSize = 11.sp,
+                        color = Anthracite,
+                        lineHeight = 17.sp
+                    )
+                }
             }
         }
     }
@@ -2871,6 +3415,123 @@ fun SettingsPage(viewModel: OperationsViewModel) {
             }
         }
 
+        // --- SÉCURITÉ CARD ---
+        val appLockEnabled by viewModel.appLockEnabled.collectAsState()
+        val fallbackPinHash by viewModel.fallbackPinHash.collectAsState()
+        var showPinDialog by remember { mutableStateOf(false) }
+        var tempPinInput by remember { mutableStateOf("") }
+        var pinError by remember { mutableStateOf<String?>(null) }
+
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Sécurité et Verrouillage", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Verrouiller l'application", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Active la vérification biométrique ou par code PIN à l'ouverture de l'application.", fontSize = 11.sp, color = MediumGray)
+                    }
+                    Switch(
+                        checked = appLockEnabled,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                if (fallbackPinHash.isEmpty()) {
+                                    showPinDialog = true
+                                } else {
+                                    viewModel.setAppLockEnabled(true)
+                                }
+                            } else {
+                                viewModel.setAppLockEnabled(false)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige),
+                        modifier = Modifier.testTag("app_lock_switch")
+                    )
+                }
+
+                if (fallbackPinHash.isNotEmpty()) {
+                    Divider(color = LightGrayDivider)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Code PIN de secours", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Un code PIN est configuré comme moyen de secours.", fontSize = 11.sp, color = MediumGray)
+                        }
+                        TextButton(onClick = {
+                            tempPinInput = ""
+                            pinError = null
+                            showPinDialog = true
+                        }) {
+                            Text("Modifier le PIN", color = GoldClassic, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showPinDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showPinDialog = false
+                    pinError = null
+                },
+                title = { Text("Définir le code PIN de secours") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Saisissez un code PIN à 4 chiffres pour déverrouiller l'application en cas d'échec biométrique.", fontSize = 12.sp, color = MediumGray)
+                        OutlinedTextField(
+                            value = tempPinInput,
+                            onValueChange = {
+                                if (it.length <= 4 && it.all { char -> char.isDigit() }) {
+                                    tempPinInput = it
+                                }
+                            },
+                            label = { Text("Code PIN (4 chiffres)") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (pinError != null) {
+                            Text(pinError!!, color = Color(0xFFC62828), fontSize = 11.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (tempPinInput.length == 4) {
+                            viewModel.setFallbackPin(tempPinInput)
+                            viewModel.setAppLockEnabled(true)
+                            showPinDialog = false
+                            pinError = null
+                        } else {
+                            pinError = "Le code PIN doit contenir exactement 4 chiffres."
+                        }
+                    }) {
+                        Text("Enregistrer", color = GoldClassic, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showPinDialog = false
+                        pinError = null
+                    }) {
+                        Text("Annuler")
+                    }
+                }
+            )
+        }
+
         // --- NOTIFICATIONS OPTIONS CARD ---
         OperationsCard {
             Column(
@@ -2911,6 +3572,199 @@ fun SettingsPage(viewModel: OperationsViewModel) {
                         onCheckedChange = { viewModel.updateSettings(apiKeyInput, notifsEnabled, it) },
                         colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige)
                     )
+                }
+            }
+        }
+
+        // --- EXPORT / IMPORT CARD ---
+        val context = LocalContext.current
+        val coroutineScope = rememberCoroutineScope()
+        var showConfirmImport by remember { mutableStateOf(false) }
+        var selectedImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+        var infoMessage by remember { mutableStateOf<String?>(null) }
+
+        val exportLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.CreateDocument("application/json")
+        ) { uri ->
+            if (uri != null) {
+                coroutineScope.launch {
+                    try {
+                        val jsonString = viewModel.exportData()
+                        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                            outputStream.write(jsonString.toByteArray())
+                        }
+                        infoMessage = "Données exportées avec succès."
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        infoMessage = "Erreur lors de l'exportation : ${e.localizedMessage}"
+                    }
+                }
+            }
+        }
+
+        val importLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            if (uri != null) {
+                selectedImportUri = uri
+                showConfirmImport = true
+            }
+        }
+
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Sauvegarde et Restauration", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                Text(
+                    text = "Exportez l'intégralité de vos données locales sous format JSON pour les sauvegarder, ou importez un fichier de sauvegarde pour restaurer votre historique.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = { exportLauncher.launch("directeur_operations_backup.json") },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).testTag("export_button")
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, tint = WhitePure, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Exporter JSON", color = WhitePure, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { importLauncher.launch(arrayOf("application/json")) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Anthracite),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).testTag("import_button")
+                    ) {
+                        Icon(Icons.Default.Upload, contentDescription = null, tint = WhitePure, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Importer JSON", color = WhitePure, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (infoMessage != null) {
+            AlertDialog(
+                onDismissRequest = { infoMessage = null },
+                title = { Text("Information") },
+                text = { Text(infoMessage!!) },
+                confirmButton = {
+                    TextButton(onClick = { infoMessage = null }) {
+                        Text("OK", color = GoldClassic)
+                    }
+                }
+            )
+        }
+
+        if (showConfirmImport) {
+            AlertDialog(
+                onDismissRequest = { showConfirmImport = false },
+                title = { Text("Confirmer l'importation") },
+                text = { Text("Cette action remplacera toutes vos données actuelles. Êtes-vous sûr de vouloir continuer ?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showConfirmImport = false
+                        selectedImportUri?.let { uri ->
+                            coroutineScope.launch {
+                                try {
+                                    val jsonString = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                                        inputStream.bufferedReader().use { it.readText() }
+                                    }
+                                    if (jsonString != null) {
+                                        val success = viewModel.importData(jsonString)
+                                        infoMessage = if (success) {
+                                            "Données importées avec succès."
+                                        } else {
+                                            "Échec de l'importation : Format JSON invalide."
+                                        }
+                                    } else {
+                                        infoMessage = "Impossible de lire le fichier de sauvegarde."
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    infoMessage = "Erreur lors de l'importation : ${e.localizedMessage}"
+                                }
+                            }
+                        }
+                    }) {
+                        Text("Importer & Écraser", color = Color(0xFFC62828), fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmImport = false }) {
+                        Text("Annuler")
+                    }
+                }
+            )
+        }
+
+        // --- HISTORIQUE DES BILANS CARD ---
+        val sharedPrefsWeekly = LocalContext.current.getSharedPreferences("directeur_ops_settings", Context.MODE_PRIVATE)
+        val weeklyReportHistory = remember { sharedPrefsWeekly.getString("weekly_report_history", "") ?: "" }
+
+        if (weeklyReportHistory.isNotEmpty()) {
+            var isWeeklyExpanded by remember { mutableStateOf(false) }
+            OperationsCard {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isWeeklyExpanded = !isWeeklyExpanded },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Derniers Bilans Hebdomadaires", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                            Text("Consultez l'historique de vos bilans de performance.", fontSize = 11.sp, color = MediumGray)
+                        }
+                        Icon(
+                            imageVector = if (isWeeklyExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = GoldClassic
+                        )
+                    }
+
+                    if (isWeeklyExpanded) {
+                        Divider(color = LightGrayDivider)
+
+                        val reports = weeklyReportHistory.split("\n\n===\n\n")
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            reports.forEach { report ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(LightBeige.copy(alpha = 0.3f), shape = RoundedCornerShape(8.dp))
+                                        .border(width = 0.5.dp, color = LightGrayDivider, shape = RoundedCornerShape(8.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = report,
+                                        fontSize = 11.sp,
+                                        color = Anthracite,
+                                        lineHeight = 17.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

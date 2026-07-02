@@ -3,6 +3,7 @@ package com.example.data
 import kotlinx.coroutines.flow.Flow
 
 class OperationsRepository(private val db: AppDatabase) {
+    val database: AppDatabase = db
     val tasksFlow: Flow<List<Task>> = db.taskDao().getAllTasksFlow()
     val gymSessionsFlow: Flow<List<GymSession>> = db.gymSessionDao().getAllGymSessionsFlow()
     val supplementLogsFlow: Flow<List<SupplementLog>> = db.supplementLogDao().getAllSupplementLogsFlow()
@@ -11,6 +12,13 @@ class OperationsRepository(private val db: AppDatabase) {
     val breathingSessionsFlow: Flow<List<BreathingSession>> = db.breathingSessionDao().getAllBreathingSessionsFlow()
     val journalEntriesFlow: Flow<List<JournalEntry>> = db.journalEntryDao().getAllJournalEntriesFlow()
     val sleepLogsFlow: Flow<List<SleepLog>> = db.sleepLogDao().getAllSleepLogsFlow()
+    val gymExercisesFlow: Flow<List<GymExercise>> = db.gymExerciseDao().getAllExercisesFlow()
+
+    fun getExercisesForSessionFlow(sessionId: Long): Flow<List<GymExercise>> = db.gymExerciseDao().getExercisesForSessionFlow(sessionId)
+    suspend fun getExercisesForSession(sessionId: Long): List<GymExercise> = db.gymExerciseDao().getExercisesForSession(sessionId)
+    suspend fun insertGymExercise(exercise: GymExercise) = db.gymExerciseDao().insertExercise(exercise)
+    suspend fun deleteGymExerciseById(id: Long) = db.gymExerciseDao().deleteExerciseById(id)
+    suspend fun deleteExercisesForSession(sessionId: Long) = db.gymExerciseDao().deleteExercisesForSession(sessionId)
 
     // Tasks CRUD
     suspend fun insertTask(task: Task) = db.taskDao().insertTask(task)
@@ -53,5 +61,6 @@ class OperationsRepository(private val db: AppDatabase) {
         db.breathingSessionDao().deleteAllBreathingSessions()
         db.journalEntryDao().deleteAllJournalEntries()
         db.sleepLogDao().deleteAllSleepLogs()
+        db.gymExerciseDao().deleteAllExercises()
     }
 }

@@ -44,6 +44,7 @@ data class RecoveryStreak(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val label: String, // e.g., "Streak #1"
     val days: Int,
+    val startDate: String, // "YYYY-MM-DD"
     val endDate: String // "YYYY-MM-DD"
 )
 
@@ -75,6 +76,16 @@ data class SleepLog(
     val bedtime: String, // "HH:MM"
     val waketime: String, // "HH:MM"
     val durationHours: Float
+)
+
+@Entity(tableName = "gym_exercises")
+data class GymExercise(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: Long,
+    val exerciseName: String,
+    val sets: Int,
+    val reps: Int,
+    val weightKg: Float
 )
 
 
@@ -197,6 +208,30 @@ interface SleepLogDao {
     suspend fun deleteAllSleepLogs()
 }
 
+@Dao
+interface GymExerciseDao {
+    @Query("SELECT * FROM gym_exercises WHERE sessionId = :sessionId ORDER BY id ASC")
+    fun getExercisesForSessionFlow(sessionId: Long): Flow<List<GymExercise>>
+
+    @Query("SELECT * FROM gym_exercises WHERE sessionId = :sessionId ORDER BY id ASC")
+    suspend fun getExercisesForSession(sessionId: Long): List<GymExercise>
+
+    @Query("SELECT * FROM gym_exercises ORDER BY id ASC")
+    fun getAllExercisesFlow(): Flow<List<GymExercise>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExercise(exercise: GymExercise)
+
+    @Query("DELETE FROM gym_exercises WHERE id = :id")
+    suspend fun deleteExerciseById(id: Long)
+
+    @Query("DELETE FROM gym_exercises WHERE sessionId = :sessionId")
+    suspend fun deleteExercisesForSession(sessionId: Long)
+
+    @Query("DELETE FROM gym_exercises")
+    suspend fun deleteAllExercises()
+}
+
 
 // --- Room Database ---
 
@@ -209,9 +244,10 @@ interface SleepLogDao {
         KegelLog::class,
         BreathingSession::class,
         JournalEntry::class,
-        SleepLog::class
+        SleepLog::class,
+        GymExercise::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -223,6 +259,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun breathingSessionDao(): BreathingSessionDao
     abstract fun journalEntryDao(): JournalEntryDao
     abstract fun sleepLogDao(): SleepLogDao
+    abstract fun gymExerciseDao(): GymExerciseDao
 
     companion object {
         @Volatile

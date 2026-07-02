@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.animateDpAsState
@@ -32,7 +32,10 @@ import com.example.data.OperationsRepository
 import com.example.ui.*
 import com.example.ui.theme.*
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+    private val isUnlockedState = mutableStateOf(false)
+    private lateinit var viewModel: OperationsViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -43,7 +46,7 @@ class MainActivity : ComponentActivity() {
 
         // 2. Initialize ViewModel
         val factory = OperationsViewModelFactory(application, repository)
-        val viewModel = ViewModelProvider(this, factory)[OperationsViewModel::class.java]
+        viewModel = ViewModelProvider(this, factory)[OperationsViewModel::class.java]
 
         // 3. Request permissions for notifications on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -52,14 +55,229 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // 4. Schedule positive affirmations and weekly reports
+        com.example.data.AffirmationScheduler.scheduleAll(this)
+        com.example.data.WeeklyReportScheduler.schedule(this)
+
         setContent {
             MyApplicationTheme {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    containerColor = WhitePure
-                ) { innerPadding ->
-                    Box(modifier = Modifier.padding(innerPadding)) {
-                        MainAppLayout(viewModel)
+                val appLockEnabled by viewModel.appLockEnabled.collectAsState()
+                val isUnlocked by isUnlockedState
+
+                if (appLockEnabled && !isUnlocked) {
+                    LockScreen(
+                        activity = this,
+                        viewModel = viewModel,
+                        onUnlockSuccess = {
+                            isUnlockedState.value = true
+                        }
+                    )
+                } else {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        containerColor = WhitePure
+                    ) { innerPadding ->
+                        Box(modifier = Modifier.padding(innerPadding)) {
+                            MainAppLayout(viewModel)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::viewModel.isInitialized) {
+            val appLockEnabled = viewModel.appLockEnabled.value
+            if (appLockEnabled) {
+                isUnlockedState.value = false
+            }
+        }
+    }
+}
+
+@Composable
+fun LockScreen(
+    activity: FragmentActivity,
+    viewModel: OperationsViewModel,
+    onUnlockSuccess: () -> Unit
+) {
+    val fallbackPinHash by viewModel.fallbackPinHash.collectAsState()
+    var enteredPin by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val isBiometricAvailable = remember { com.example.data.BiometricAuthManager.isBiometricAvailable(activity) }
+
+    // Auto trigger biometric prompt on start
+    LaunchedEffect(Unit) {
+        if (isBiometricAvailable) {
+            com.example.data.BiometricAuthManager.showBiometricPrompt(
+                activity = activity,
+                onSuccess = { onUnlockSuccess() },
+                onError = { err ->
+                    errorMessage = err
+                }
+            )
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(WhitePure)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // Gold Logo Icon
+        Icon(
+            imageVector = Icons.Default.Lock,
+            contentDescription = "Lock Logo",
+            tint = GoldClassic,
+            modifier = Modifier.size(64.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "DIRECTEUR DES OPÉRATIONS",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            letterSpacing = 2.sp
+        )
+        Text(
+            text = "Sécurité active",
+            fontSize = 12.sp,
+            color = MediumGray
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        if (isBiometricAvailable) {
+            Button(
+                onClick = {
+                    com.example.data.BiometricAuthManager.showBiometricPrompt(
+                        activity = activity,
+                        onSuccess = { onUnlockSuccess() },
+                        onError = { err -> errorMessage = err }
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                modifier = Modifier.testTag("biometric_unlock_button")
+            ) {
+                Icon(Icons.Default.Fingerprint, contentDescription = null, tint = WhitePure)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Utiliser l'empreinte", color = WhitePure)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("OU", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // PIN code entry
+        Text(
+            text = if (fallbackPinHash.isEmpty()) "Définir un code PIN de secours" else "Saisir le code PIN",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = Anthracite
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // PIN dot indicators
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(vertical = 8.dp)
+        ) {
+            for (i in 1..4) {
+                val active = enteredPin.length >= i
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .background(
+                            color = if (active) GoldClassic else Color.Transparent,
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                        .border(
+                            width = 2.dp,
+                            color = GoldClassic,
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                )
+            }
+        }
+
+        if (errorMessage != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(errorMessage!!, color = Color(0xFFC62828), fontSize = 12.sp)
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Custom elegant keypad
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            val keys = listOf(
+                listOf("1", "2", "3"),
+                listOf("4", "5", "6"),
+                listOf("7", "8", "9"),
+                listOf("C", "0", "⌫")
+            )
+
+            for (row in keys) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    for (key in row) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(
+                                    color = Color(0xFFF9F9F9),
+                                    shape = androidx.compose.foundation.shape.CircleShape
+                                )
+                                .clickable {
+                                    when (key) {
+                                        "C" -> enteredPin = ""
+                                        "⌫" -> if (enteredPin.isNotEmpty()) enteredPin = enteredPin.dropLast(1)
+                                        else -> {
+                                            if (enteredPin.length < 4) {
+                                                enteredPin += key
+                                                if (enteredPin.length == 4) {
+                                                    // Verify PIN
+                                                    if (fallbackPinHash.isEmpty()) {
+                                                        // Register PIN
+                                                        viewModel.setFallbackPin(enteredPin)
+                                                        onUnlockSuccess()
+                                                    } else {
+                                                        val hash = com.example.data.BiometricAuthManager.hashPin(enteredPin)
+                                                        if (hash == fallbackPinHash) {
+                                                            onUnlockSuccess()
+                                                        } else {
+                                                            errorMessage = "Code PIN incorrect"
+                                                            enteredPin = ""
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = key,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                        }
                     }
                 }
             }

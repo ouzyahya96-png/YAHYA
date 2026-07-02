@@ -51,6 +51,9 @@ class OperationsViewModel(
     val sleepLogs: StateFlow<List<SleepLog>> = repository.sleepLogsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val gymExercises: StateFlow<List<GymExercise>> = repository.gymExercisesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- Settings / Preferences State ---
     private val _geminiApiKey = MutableStateFlow<String>(sharedPrefs.getString("gemini_api_key", "") ?: "")
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
@@ -73,6 +76,32 @@ class OperationsViewModel(
 
     private val _analysisError = MutableStateFlow<String?>(null)
     val analysisError: StateFlow<String?> = _analysisError.asStateFlow()
+
+    // Daily affirmation state
+    private val _dailyAffirmation = MutableStateFlow<String>("")
+    val dailyAffirmation: StateFlow<String> = _dailyAffirmation.asStateFlow()
+
+    private val _appLockEnabled = MutableStateFlow(sharedPrefs.getBoolean("app_lock_enabled", false))
+    val appLockEnabled: StateFlow<Boolean> = _appLockEnabled.asStateFlow()
+
+    private val _fallbackPinHash = MutableStateFlow<String>(sharedPrefs.getString("fallback_pin_hash", "") ?: "")
+    val fallbackPinHash: StateFlow<String> = _fallbackPinHash.asStateFlow()
+
+    fun setAppLockEnabled(enabled: Boolean) {
+        sharedPrefs.edit().putBoolean("app_lock_enabled", enabled).apply()
+        _appLockEnabled.value = enabled
+    }
+
+    fun setFallbackPin(pin: String) {
+        val hash = com.example.data.BiometricAuthManager.hashPin(pin)
+        sharedPrefs.edit().putString("fallback_pin_hash", hash).apply()
+        _fallbackPinHash.value = hash
+    }
+
+    fun clearFallbackPin() {
+        sharedPrefs.edit().remove("fallback_pin_hash").apply()
+        _fallbackPinHash.value = ""
+    }
 
     // --- Active Exercise Timers States ---
     // Kegel timer states
@@ -114,6 +143,24 @@ class OperationsViewModel(
             val today = getTodayDate()
             sharedPrefs.edit().putString("current_streak_start", today).apply()
             _currentStreakStart.value = today
+        }
+        loadDailyAffirmation()
+    }
+
+    private fun loadDailyAffirmation() {
+        val today = getTodayDate()
+        val savedDate = sharedPrefs.getString("daily_affirmation_date", "")
+        val savedAffirmation = sharedPrefs.getString("daily_affirmation", "")
+
+        if (savedDate == today && !savedAffirmation.isNullOrEmpty()) {
+            _dailyAffirmation.value = savedAffirmation
+        } else {
+            val newAffirmation = com.example.data.AffirmationsData.getRandomAffirmation()
+            sharedPrefs.edit()
+                .putString("daily_affirmation_date", today)
+                .putString("daily_affirmation", newAffirmation)
+                .apply()
+            _dailyAffirmation.value = newAffirmation
         }
     }
 
@@ -229,6 +276,27 @@ class OperationsViewModel(
     fun deleteGymSession(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteGymSessionById(id)
+            repository.deleteExercisesForSession(id) // Also cleanup related exercises
+        }
+    }
+
+    fun addGymExercise(sessionId: Long, exerciseName: String, sets: Int, reps: Int, weightKg: Float) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val exercise = GymExercise(sessionId = sessionId, exerciseName = exerciseName, sets = sets, reps = reps, weightKg = weightKg)
+            repository.insertGymExercise(exercise)
+        }
+    }
+
+    fun updateGymExercise(id: Long, sessionId: Long, exerciseName: String, sets: Int, reps: Int, weightKg: Float) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val exercise = GymExercise(id = id, sessionId = sessionId, exerciseName = exerciseName, sets = sets, reps = reps, weightKg = weightKg)
+            repository.insertGymExercise(exercise)
+        }
+    }
+
+    fun deleteGymExercise(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteGymExerciseById(id)
         }
     }
 
@@ -261,7 +329,7 @@ class OperationsViewModel(
     // --- Recovery Streak Actions ---
     fun resetRecoveryStreak() {
         val today = getTodayDate()
-        val start = _currentStreakStart.value ?: today
+        val start = _currentStreakStart.value
         val days = calculateCurrentStreak()
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -271,6 +339,7 @@ class OperationsViewModel(
                 val pastStreak = RecoveryStreak(
                     label = "Streak #$currentCount",
                     days = days,
+                    startDate = start,
                     endDate = today
                 )
                 repository.insertRecoveryStreak(pastStreak)
@@ -458,6 +527,14 @@ class OperationsViewModel(
         _geminiApiKey.value = apiKey
         _notificationsEnabled.value = notifsEnabled
         _soundEnabled.value = sound
+
+        if (notifsEnabled) {
+            com.example.data.AffirmationScheduler.scheduleAll(application)
+            com.example.data.WeeklyReportScheduler.schedule(application)
+        } else {
+            com.example.data.AffirmationScheduler.cancelAll(application)
+            com.example.data.WeeklyReportScheduler.cancel(application)
+        }
     }
 
     fun fullResetData() {
@@ -475,6 +552,14 @@ class OperationsViewModel(
             sharedPrefs.edit().putString("current_streak_start", today).apply()
             _currentStreakStart.value = today
         }
+    }
+
+    suspend fun exportData(): String {
+        return com.example.data.DataExportManager.exportToJson(repository)
+    }
+
+    suspend fun importData(json: String): Boolean {
+        return com.example.data.DataExportManager.importFromJson(repository, json)
     }
 
     // --- Gemini Daily Analysis ---
