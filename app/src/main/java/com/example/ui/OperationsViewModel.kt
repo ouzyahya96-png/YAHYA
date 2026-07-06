@@ -744,12 +744,17 @@ class OperationsViewModel(
             var suppTakenCount = 0
             var suppTotalCount = 0
             recentSupps.forEach { log ->
-                suppTotalCount += 5
+                suppTotalCount += 10
                 if (log.creatine) suppTakenCount++
                 if (log.omega3) suppTakenCount++
                 if (log.magnesium) suppTakenCount++
                 if (log.ashwagandha) suppTakenCount++
                 if (log.tongkatAli) suppTakenCount++
+                if (log.vitaminD3) suppTakenCount++
+                if (log.zinc) suppTakenCount++
+                if (log.lTheanine) suppTakenCount++
+                if (log.boron) suppTakenCount++
+                if (log.lCitrulline) suppTakenCount++
             }
 
             val gymCount = gymSessions.value.filter {

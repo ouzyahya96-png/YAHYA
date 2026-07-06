@@ -569,6 +569,30 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        val takenTodayCount = listOf(
+                            todaySuppLog.creatine, todaySuppLog.omega3, todaySuppLog.magnesium,
+                            todaySuppLog.ashwagandha, todaySuppLog.tongkatAli, todaySuppLog.vitaminD3,
+                            todaySuppLog.zinc, todaySuppLog.lTheanine, todaySuppLog.boron, todaySuppLog.lCitrulline
+                        ).count { it }
+                        val progressPct = takenTodayCount / 10f
+
+                        Text(
+                            text = "$takenTodayCount/10 pris aujourd'hui",
+                            fontSize = 10.sp,
+                            color = MediumGray
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { progressPct },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = GoldClassic,
+                            trackColor = LightGrayDivider,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         val listSupps = listOf(
                             "Créatine" to ("creatine" to todaySuppLog.creatine),
                             "Oméga-3" to ("omega3" to todaySuppLog.omega3),
