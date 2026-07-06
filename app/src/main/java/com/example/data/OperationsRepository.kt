@@ -14,6 +14,10 @@ class OperationsRepository(private val db: AppDatabase) {
     val sleepLogsFlow: Flow<List<SleepLog>> = db.sleepLogDao().getAllSleepLogsFlow()
     val gymExercisesFlow: Flow<List<GymExercise>> = db.gymExerciseDao().getAllExercisesFlow()
     val sunExposureLogsFlow: Flow<List<SunExposureLog>> = db.sunExposureLogDao().getAllSunExposureLogsFlow()
+    val communicationPracticeLogsFlow: Flow<List<CommunicationPracticeLog>> = db.communicationPracticeLogDao().getAllCommunicationPracticeLogsFlow()
+    val survivalStockItemsFlow: Flow<List<SurvivalStockItem>> = db.survivalStockDao().getAllSurvivalStockItemsFlow()
+    val urgeSurfLogsFlow: Flow<List<UrgeSurfLog>> = db.urgeSurfLogDao().getAllUrgeSurfLogsFlow()
+    val delayTrainingLogsFlow: Flow<List<DelayTrainingLog>> = db.delayTrainingLogDao().getAllDelayTrainingLogsFlow()
 
     fun getExercisesForSessionFlow(sessionId: Long): Flow<List<GymExercise>> = db.gymExerciseDao().getExercisesForSessionFlow(sessionId)
     suspend fun getExercisesForSession(sessionId: Long): List<GymExercise> = db.gymExerciseDao().getExercisesForSession(sessionId)
@@ -56,6 +60,23 @@ class OperationsRepository(private val db: AppDatabase) {
     suspend fun getSunExposureLogByDate(date: String): SunExposureLog? = db.sunExposureLogDao().getSunExposureLogByDate(date)
     suspend fun insertSunExposureLog(log: SunExposureLog) = db.sunExposureLogDao().insertSunExposureLog(log)
 
+    // Communication Practice Logs
+    suspend fun getCommunicationPracticeLogByDate(date: String): CommunicationPracticeLog? = db.communicationPracticeLogDao().getCommunicationPracticeLogByDate(date)
+    suspend fun insertCommunicationPracticeLog(log: CommunicationPracticeLog) = db.communicationPracticeLogDao().insertCommunicationPracticeLog(log)
+
+    // Survival Stock Items
+    fun getSurvivalStockItemsByCategoryFlow(category: String): Flow<List<SurvivalStockItem>> = db.survivalStockDao().getSurvivalStockItemsByCategoryFlow(category)
+    suspend fun insertSurvivalStockItem(item: SurvivalStockItem) = db.survivalStockDao().insertSurvivalStockItem(item)
+    suspend fun deleteSurvivalStockItem(item: SurvivalStockItem) = db.survivalStockDao().deleteSurvivalStockItem(item)
+
+    // Urge Surf Logs
+    suspend fun insertUrgeSurfLog(log: UrgeSurfLog) = db.urgeSurfLogDao().insertUrgeSurfLog(log)
+    suspend fun deleteUrgeSurfLog(log: UrgeSurfLog) = db.urgeSurfLogDao().deleteUrgeSurfLog(log)
+
+    // Delay Training Logs
+    suspend fun getDelayTrainingLogByDate(date: String): DelayTrainingLog? = db.delayTrainingLogDao().getDelayTrainingLogByDate(date)
+    suspend fun insertDelayTrainingLog(log: DelayTrainingLog) = db.delayTrainingLogDao().insertDelayTrainingLog(log)
+
     // Clear all data (Full Reset)
     suspend fun clearAllData() {
         db.taskDao().deleteAllTasks()
@@ -68,5 +89,9 @@ class OperationsRepository(private val db: AppDatabase) {
         db.sleepLogDao().deleteAllSleepLogs()
         db.gymExerciseDao().deleteAllExercises()
         db.sunExposureLogDao().deleteAllSunExposureLogs()
+        db.communicationPracticeLogDao().deleteAllCommunicationPracticeLogs()
+        db.survivalStockDao().deleteAllSurvivalStockItems()
+        db.urgeSurfLogDao().deleteAllUrgeSurfLogs()
+        db.delayTrainingLogDao().deleteAllDelayTrainingLogs()
     }
 }

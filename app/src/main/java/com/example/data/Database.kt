@@ -57,7 +57,24 @@ data class RecoveryStreak(
 @Entity(tableName = "kegel_logs")
 data class KegelLog(
     @PrimaryKey val date: String, // "YYYY-MM-DD"
-    val done: Boolean = false
+    val done: Boolean = false,
+    val morningDone: Boolean = false,
+    val middayDone: Boolean = false,
+    val eveningDone: Boolean = false
+)
+
+@Entity(tableName = "urge_surf_logs")
+data class UrgeSurfLog(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val date: String, // "YYYY-MM-DD"
+    val durationMinutes: Int
+)
+
+@Entity(tableName = "delay_training_logs")
+data class DelayTrainingLog(
+    @PrimaryKey val date: String, // "YYYY-MM-DD"
+    val challengeText: String,
+    val completed: Boolean = false
 )
 
 @Entity(tableName = "breathing_sessions")
@@ -82,7 +99,9 @@ data class SleepLog(
     val bedtime: String, // "HH:MM"
     val waketime: String, // "HH:MM"
     val durationHours: Float,
-    val quality: Int = 3
+    val quality: Int = 3,
+    val stretchingDone: Boolean = false,
+    val screensOffBeforeBed: Boolean = false
 )
 
 @Entity(tableName = "gym_exercises")
@@ -101,6 +120,26 @@ data class SunExposureLog(
     val minutesExposed: Int = 0,
     val done: Boolean = false
 )
+
+@Entity(tableName = "communication_practice_logs")
+data class CommunicationPracticeLog(
+    @PrimaryKey val date: String, // "YYYY-MM-DD"
+    val skillText: String,
+    val practiced: Boolean = false
+)
+
+@Entity(tableName = "survival_stock_items")
+data class SurvivalStockItem(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val category: String, // "Eau", "Céréales", "Légumineuses", "Conserves", "Graisses", "Sucre", "Lait en poudre", "Sel", "Hygiène", "Médical"
+    val name: String,
+    val quantity: Float,
+    val unit: String, // "kg", "L", "unités"
+    val purchaseDate: String, // "YYYY-MM-DD"
+    val estimatedExpiryDate: String?, // "YYYY-MM-DD" or null
+    val storageMethod: String
+)
+
 
 
 // --- Room DAOs ---
@@ -178,6 +217,36 @@ interface KegelLogDao {
 
     @Query("DELETE FROM kegel_logs")
     suspend fun deleteAllKegelLogs()
+}
+
+@Dao
+interface UrgeSurfLogDao {
+    @Query("SELECT * FROM urge_surf_logs ORDER BY date DESC, id DESC")
+    fun getAllUrgeSurfLogsFlow(): Flow<List<UrgeSurfLog>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUrgeSurfLog(log: UrgeSurfLog)
+
+    @Delete
+    suspend fun deleteUrgeSurfLog(log: UrgeSurfLog)
+
+    @Query("DELETE FROM urge_surf_logs")
+    suspend fun deleteAllUrgeSurfLogs()
+}
+
+@Dao
+interface DelayTrainingLogDao {
+    @Query("SELECT * FROM delay_training_logs ORDER BY date DESC")
+    fun getAllDelayTrainingLogsFlow(): Flow<List<DelayTrainingLog>>
+
+    @Query("SELECT * FROM delay_training_logs WHERE date = :date LIMIT 1")
+    suspend fun getDelayTrainingLogByDate(date: String): DelayTrainingLog?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDelayTrainingLog(log: DelayTrainingLog)
+
+    @Query("DELETE FROM delay_training_logs")
+    suspend fun deleteAllDelayTrainingLogs()
 }
 
 @Dao
@@ -261,6 +330,40 @@ interface SunExposureLogDao {
     suspend fun deleteAllSunExposureLogs()
 }
 
+@Dao
+interface CommunicationPracticeLogDao {
+    @Query("SELECT * FROM communication_practice_logs ORDER BY date DESC")
+    fun getAllCommunicationPracticeLogsFlow(): Flow<List<CommunicationPracticeLog>>
+
+    @Query("SELECT * FROM communication_practice_logs WHERE date = :date LIMIT 1")
+    suspend fun getCommunicationPracticeLogByDate(date: String): CommunicationPracticeLog?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCommunicationPracticeLog(log: CommunicationPracticeLog)
+
+    @Query("DELETE FROM communication_practice_logs")
+    suspend fun deleteAllCommunicationPracticeLogs()
+}
+
+@Dao
+interface SurvivalStockDao {
+    @Query("SELECT * FROM survival_stock_items ORDER BY category ASC")
+    fun getAllSurvivalStockItemsFlow(): Flow<List<SurvivalStockItem>>
+
+    @Query("SELECT * FROM survival_stock_items WHERE category = :category ORDER BY estimatedExpiryDate ASC")
+    fun getSurvivalStockItemsByCategoryFlow(category: String): Flow<List<SurvivalStockItem>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSurvivalStockItem(item: SurvivalStockItem)
+
+    @Delete
+    suspend fun deleteSurvivalStockItem(item: SurvivalStockItem)
+
+    @Query("DELETE FROM survival_stock_items")
+    suspend fun deleteAllSurvivalStockItems()
+}
+
+
 
 // --- Room Database ---
 
@@ -275,9 +378,13 @@ interface SunExposureLogDao {
         JournalEntry::class,
         SleepLog::class,
         GymExercise::class,
-        SunExposureLog::class
+        SunExposureLog::class,
+        CommunicationPracticeLog::class,
+        SurvivalStockItem::class,
+        UrgeSurfLog::class,
+        DelayTrainingLog::class
     ],
-    version = 6,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -291,6 +398,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sleepLogDao(): SleepLogDao
     abstract fun gymExerciseDao(): GymExerciseDao
     abstract fun sunExposureLogDao(): SunExposureLogDao
+    abstract fun communicationPracticeLogDao(): CommunicationPracticeLogDao
+    abstract fun survivalStockDao(): SurvivalStockDao
+    abstract fun urgeSurfLogDao(): UrgeSurfLogDao
+    abstract fun delayTrainingLogDao(): DelayTrainingLogDao
 
     companion object {
         @Volatile

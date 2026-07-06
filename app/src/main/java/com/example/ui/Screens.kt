@@ -5,6 +5,7 @@ import androidx.compose.animation.core.*
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.drawBehind
@@ -40,9 +42,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import android.content.Context
 import com.example.data.*
 import com.example.ui.theme.*
@@ -274,13 +281,14 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                             color = MediumGray
                         )
                     } else if (isLoadingAnalysis) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(80.dp),
-                            contentAlignment = Alignment.Center
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                         ) {
-                            CircularProgressIndicator(color = GoldClassic, strokeWidth = 2.5.dp)
+                            SkeletonLoader(height = 18.dp)
+                            SkeletonLoader(height = 14.dp)
+                            SkeletonLoader(height = 14.dp)
+                            SkeletonLoader(height = 14.dp)
                         }
                     } else if (!analysisError.isNullOrEmpty()) {
                         Text(
@@ -611,11 +619,9 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(text = label, fontSize = 11.sp, color = Anthracite)
-                                Checkbox(
+                                PremiumCheckbox(
                                     checked = taken,
-                                    onCheckedChange = { viewModel.toggleSupplement(key, it) },
-                                    colors = CheckboxDefaults.colors(checkedColor = GoldClassic),
-                                    modifier = Modifier.size(16.dp).scale(0.7f)
+                                    onCheckedChange = { viewModel.toggleSupplement(key, it) }
                                 )
                             }
                         }
@@ -876,10 +882,9 @@ fun TaskRow(task: Task, onToggle: () -> Unit, onDelete: () -> Unit) {
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(
+        PremiumCheckbox(
             checked = task.done,
-            onCheckedChange = { onToggle() },
-            colors = CheckboxDefaults.colors(checkedColor = GoldClassic)
+            onCheckedChange = { onToggle() }
         )
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -1349,12 +1354,19 @@ fun CalendrierPage(viewModel: OperationsViewModel) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Spacer(modifier = Modifier.width(50.dp)) // Time column offset
                     weekDays.forEach { date ->
-                        val dayLabel = viewModel.getDayOfWeekLabel(sdfDb.format(date))
+                        val dateStr = sdfDb.format(date)
+                        val dayLabel = viewModel.getDayOfWeekLabel(dateStr)
                         val dayNum = SimpleDateFormat("d", Locale.getDefault()).format(date)
-                        val isToday = sdfDb.format(date) == viewModel.getTodayDate()
+                        val isToday = dateStr == viewModel.getTodayDate()
+                        val dayEventsCount = tasks.count { it.date == dateStr && it.time != null } + gymSessions.count { it.date == dateStr }
+
                         Column(
                             modifier = Modifier
                                 .weight(1f)
+                                .clickable {
+                                    selectedDayStr = dateStr
+                                    viewMode = "Jour"
+                                }
                                 .padding(vertical = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
@@ -1370,6 +1382,34 @@ fun CalendrierPage(viewModel: OperationsViewModel) {
                                 fontWeight = FontWeight.Bold,
                                 color = if (isToday) GoldClassic else Anthracite
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .background(
+                                        when {
+                                            dayEventsCount >= 3 -> GoldClassic
+                                            dayEventsCount in 1..2 -> LightGrayDivider
+                                            else -> Color.Transparent
+                                        }
+                                    , CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (dayEventsCount > 0) {
+                                    Text(
+                                        text = dayEventsCount.toString(),
+                                        fontSize = 8.sp,
+                                        fontWeight = if (dayEventsCount >= 3) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (dayEventsCount >= 3) Color.White else Anthracite
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(4.dp)
+                                            .background(LightGrayDivider, CircleShape)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1952,10 +1992,9 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
                                 }
                             }
                         }
-                        Checkbox(
+                        PremiumCheckbox(
                             checked = info.taken,
-                            onCheckedChange = { viewModel.toggleSupplement(info.key, it) },
-                            colors = CheckboxDefaults.colors(checkedColor = GoldClassic)
+                            onCheckedChange = { viewModel.toggleSupplement(info.key, it) }
                         )
                     }
 
@@ -1985,6 +2024,7 @@ data class SupplementInfo(
 
 @Composable
 fun GymPage(viewModel: OperationsViewModel) {
+    val haptic = LocalHapticFeedback.current
     val gymSessions by viewModel.gymSessions.collectAsState()
     val gymExercises by viewModel.gymExercises.collectAsState()
     val todayStr = viewModel.getTodayDate()
@@ -2326,12 +2366,33 @@ fun GymPage(viewModel: OperationsViewModel) {
         )
 
         if (gymSessions.isEmpty()) {
-            Text(
-                text = "Aucune séance de sport enregistrée pour le moment.",
-                fontSize = 12.sp,
-                color = MediumGray,
-                modifier = Modifier.padding(vertical = 12.dp)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.FitnessCenter,
+                    contentDescription = null,
+                    tint = MediumGray.copy(alpha = 0.4f),
+                    modifier = Modifier.size(48.dp)
+                )
+                Text(
+                    text = "Aucune séance de sport enregistrée pour le moment.",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MediumGray,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Planifiez et enregistrez votre premier entraînement !",
+                    fontSize = 11.sp,
+                    color = MediumGray.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center
+                )
+            }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 gymSessions.forEach { sess ->
@@ -2551,6 +2612,17 @@ fun GymPage(viewModel: OperationsViewModel) {
 
                         if (sessId != null && nameEx.isNotEmpty()) {
                             val editEx = editingExercise
+                            
+                            // Check if it's a new personal record
+                            val previousMax = gymExercises
+                                .filter { (editEx == null || it.id != editEx.id) && it.exerciseName.trim().equals(nameEx, ignoreCase = true) }
+                                .map { it.weightKg }
+                                .maxOrNull() ?: 0f
+                            
+                            if (previousMax > 0f && weight > previousMax) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+
                             if (editEx != null) {
                                 viewModel.updateGymExercise(editEx.id, sessId, nameEx, sets, reps, weight)
                             } else {
@@ -2644,7 +2716,13 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
                 ) {
                     Text(text = "STREAK", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = "$currentStreak jours", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                    AnimatedCountText(
+                        value = currentStreak,
+                        suffix = " jours",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
                 }
 
                 // Divider
@@ -2684,7 +2762,7 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
                 .padding(2.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            listOf("Streak", "Kegel", "Respiration", "Stop-Start", "Journal").forEach { tab ->
+            listOf("Streak", "Kegel", "Respiration", "Stop-Start", "Reconditionnement", "Journal").forEach { tab ->
                 val isSel = activeTab == tab
                 Box(
                     modifier = Modifier
@@ -2693,7 +2771,7 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = tab,
+                        text = if (tab == "Reconditionnement") "Recon. Cérébral" else tab,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isSel) Color.White else MediumGray
@@ -2709,6 +2787,7 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
             "Kegel" -> KegelSection(viewModel, todayKegelLog.done, kegelLogs.size)
             "Respiration" -> RespirationSection(viewModel, breathingSessions.size)
             "Stop-Start" -> StopStartSection()
+            "Reconditionnement" -> ReconditionnementCerebralSection(viewModel)
             "Journal" -> JournalSection(viewModel, journalEntries)
         }
     }
@@ -2717,6 +2796,7 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
 @Composable
 fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset: (String?) -> Unit) {
     var showConfirmReset by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Goal progression
@@ -2826,7 +2906,27 @@ fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset
         // Past streaks list
         Text("Historique des streaks précédents", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Anthracite)
         if (pastStreaks.isEmpty()) {
-            Text("Aucune réinitialisation enregistrée. Restez fort !", fontSize = 12.sp, color = MediumGray)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Shield,
+                    contentDescription = null,
+                    tint = MediumGray.copy(alpha = 0.4f),
+                    modifier = Modifier.size(36.dp)
+                )
+                Text(
+                    text = "Aucune réinitialisation enregistrée. Restez fort !",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MediumGray,
+                    textAlign = TextAlign.Center
+                )
+            }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 pastStreaks.forEach { streak ->
@@ -2922,6 +3022,7 @@ fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset
                 },
                 confirmButton = {
                     TextButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onReset(selectedTriggerInDialog)
                         showConfirmReset = false
                     }) {
@@ -2940,8 +3041,12 @@ fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset
 
 @Composable
 fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalSessions: Int) {
-    var repsConfig by remember { mutableStateOf(10) }
-    var variantConfig by remember { mutableStateOf("Standard") } // "Standard", "Rapides", "Longues"
+    val startDate by viewModel.kegelProgramStartDate.collectAsState()
+    val startVal = if (startDate.isBlank()) viewModel.getKegelProgramStartDateOrDefault() else startDate
+    val (phase, weekNumber) = KegelProgramCalculator.getCurrentPhase(startVal)
+
+    var variantConfig by remember { mutableStateOf("Longues") } // "Longues", "Rapides"
+    val repsConfig = if (variantConfig == "Rapides") phase.fastReps else phase.slowReps
 
     val isRunning by viewModel.kegelIsRunning.collectAsState()
     val currentRep by viewModel.kegelRepCount.collectAsState()
@@ -2968,20 +3073,148 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
         }
     }
 
+    val todayStr = viewModel.getTodayDate()
+    val kegelLogs by viewModel.kegelLogs.collectAsState()
+    val todayKegelLog = kegelLogs.firstOrNull { it.date == todayStr } ?: KegelLog(date = todayStr)
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Routine details card
+        // --- HEADER COMPLET DU PROGRAMME PROGRESSIF ---
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Phase ${phase.phaseNumber} — ${phase.phaseName}",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        AnimatedCountText(
+                            value = weekNumber,
+                            prefix = "Semaine ",
+                            suffix = " / 24",
+                            fontSize = 12.sp,
+                            color = GoldClassic,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .background(LightBeige, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Surcharge Progressive",
+                            fontSize = 9.sp,
+                            color = GoldClassic,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Progress Bar
+                val globalProgress = (weekNumber.toFloat() / 24f).coerceIn(0f, 1f)
+                LinearProgressIndicator(
+                    progress = { globalProgress },
+                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                    color = GoldClassic,
+                    trackColor = LightGrayDivider
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Début : $startVal", fontSize = 10.sp, color = MediumGray)
+                    Text("${(globalProgress * 100).toInt()}% complété", fontSize = 10.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // --- SPECIFIC ROUTINE DETAILS CARD ---
         OperationsCard {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Section Kegel — Routine Plancher Pelvien",
-                    fontSize = 15.sp,
+                    text = "Routine du jour — Semaine $weekNumber",
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Anthracite
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Renforcement du muscle pubo-coccygien (PC) pour améliorer la régulation nerveuse.",
-                    fontSize = 12.sp,
+                    text = phase.description,
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(LightGrayBg, RoundedCornerShape(8.dp))
+                            .padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("CONTRACTION LENTE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("${phase.slowHoldSeconds}s / ${phase.slowHoldSeconds}s", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Text("${phase.slowReps} répétitions", fontSize = 9.sp, color = MediumGray)
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(LightGrayBg, RoundedCornerShape(8.dp))
+                            .padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("FLICKS RAPIDES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("1s / 1s", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Text("${phase.fastReps} répétitions", fontSize = 9.sp, color = MediumGray)
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(LightGrayBg, RoundedCornerShape(8.dp))
+                            .padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("FRÉQUENCE J.", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("${phase.sessionsPerDay} séance(s) / j", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Text("Matin/Midi/Soir", fontSize = 9.sp, color = MediumGray)
+                    }
+                }
+            }
+        }
+
+        // --- CHECKBOX COMPLETION PAR SÉANCE ---
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Suivi des séances quotidiennes",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Text(
+                    text = "Cochez vos séances après complétion pour maintenir votre streak de récupération.",
+                    fontSize = 11.sp,
                     color = MediumGray
                 )
 
@@ -2989,25 +3222,131 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (phase.sessionsPerDay == 3) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(LightGrayBg, RoundedCornerShape(8.dp))
+                                .clickable { viewModel.toggleKegelLogSession(todayStr, "morning") }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            PremiumCheckbox(
+                                checked = todayKegelLog.morningDone,
+                                onCheckedChange = { viewModel.toggleKegelLogSession(todayStr, "morning") }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Matin", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(LightGrayBg, RoundedCornerShape(8.dp))
+                                .clickable { viewModel.toggleKegelLogSession(todayStr, "midday") }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            PremiumCheckbox(
+                                checked = todayKegelLog.middayDone,
+                                onCheckedChange = { viewModel.toggleKegelLogSession(todayStr, "midday") }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Midi", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(LightGrayBg, RoundedCornerShape(8.dp))
+                                .clickable { viewModel.toggleKegelLogSession(todayStr, "evening") }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            PremiumCheckbox(
+                                checked = todayKegelLog.eveningDone,
+                                onCheckedChange = { viewModel.toggleKegelLogSession(todayStr, "evening") }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Soir", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else if (phase.sessionsPerDay == 2) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(LightGrayBg, RoundedCornerShape(8.dp))
+                                .clickable { viewModel.toggleKegelLogSession(todayStr, "morning") }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            PremiumCheckbox(
+                                checked = todayKegelLog.morningDone,
+                                onCheckedChange = { viewModel.toggleKegelLogSession(todayStr, "morning") }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Matin", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(LightGrayBg, RoundedCornerShape(8.dp))
+                                .clickable { viewModel.toggleKegelLogSession(todayStr, "evening") }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            PremiumCheckbox(
+                                checked = todayKegelLog.eveningDone,
+                                onCheckedChange = { viewModel.toggleKegelLogSession(todayStr, "evening") }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Soir", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(LightGrayBg, RoundedCornerShape(8.dp))
+                                .clickable { viewModel.toggleKegelLogSession(todayStr, "general") }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            PremiumCheckbox(
+                                checked = todayKegelLog.done,
+                                onCheckedChange = { viewModel.toggleKegelLogSession(todayStr, "general") }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Séance de Maintenance", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Total sessions complétées : $totalSessions", fontSize = 12.sp, color = Anthracite, fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Fait aujourd'hui", fontSize = 11.sp, color = MediumGray)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Checkbox(
-                            checked = isTodayChecked,
-                            onCheckedChange = { viewModel.toggleSupplement("kegel", it) }, // simple reuse or custom, but we check/uncheck
-                            colors = CheckboxDefaults.colors(checkedColor = GoldClassic),
-                            enabled = false // Managed via completing the routine
-                        )
-                    }
+                    Text(
+                        text = "Total jours complétés : $totalSessions",
+                        fontSize = 11.sp,
+                        color = MediumGray,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (todayKegelLog.done) "Validé aujourd'hui" else "Incomplet",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (todayKegelLog.done) GoldClassic else Color(0xFFC62828)
+                    )
                 }
             }
         }
 
-        // Timer GUI Card
+        // --- TIMER GUI CARD ---
         OperationsCard(borderAccent = isRunning) {
             Column(
                 modifier = Modifier.padding(20.dp),
@@ -3017,47 +3356,43 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
                 if (!isRunning) {
                     Text("Lancer une séance guidée", fontSize = 13.sp, fontWeight = FontWeight.Bold)
 
-                    // Config reps
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Répétitions : $repsConfig", fontSize = 12.sp)
-                        Slider(
-                            value = repsConfig.toFloat(),
-                            onValueChange = { repsConfig = it.toInt() },
-                            valueRange = 10f..15f,
-                            steps = 5,
-                            modifier = Modifier.width(160.dp),
-                            colors = SliderDefaults.colors(thumbColor = GoldClassic, activeTrackColor = GoldClassic)
-                        )
-                    }
-
-                    // Config variant
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Variante :", fontSize = 12.sp)
+                        Text("Type d'exercice :", fontSize = 12.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf("Standard", "Rapides", "Longues").forEach { v ->
+                            listOf("Longues", "Rapides").forEach { v ->
                                 val isS = variantConfig == v
                                 Box(
                                     modifier = Modifier
                                         .background(if (isS) LightBeige else Color.Transparent, RoundedCornerShape(8.dp))
                                         .border(1.dp, if (isS) GoldClassic else LightGrayDivider, RoundedCornerShape(8.dp))
                                         .clickable { variantConfig = v }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
-                                    Text(v, fontSize = 10.sp, color = if (isS) GoldClassic else MediumGray, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = if (v == "Longues") "Lentes (${phase.slowHoldSeconds}s)" else "Rapides (1s)",
+                                        fontSize = 10.sp,
+                                        color = if (isS) GoldClassic else MediumGray,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Cette séance effectuera $repsConfig répétitions de contractions ${variantConfig.lowercase()}.",
+                        fontSize = 11.sp,
+                        color = MediumGray,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     GoldGradientButton(
                         text = "Commencer la routine",
@@ -3065,7 +3400,6 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
                         modifier = Modifier.fillMaxWidth().testTag("start_kegel_button")
                     )
                 } else {
-                    // Running state guided circle
                     Text(
                         text = "Répétition $currentRep sur $repsConfig",
                         fontSize = 14.sp,
@@ -3117,17 +3451,378 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
             }
         }
 
-        // Scientific Info Card
         OperationsCard {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Notice Médicale", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                Text("Notice Médicale & Surcharge Progressive", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Le muscle pubo-coccygien (PC) soutient la vessie et contrôle le flux éjaculatoire. Son renforcement progressif par contractions rythmiques améliore notablement le contrôle nerveux en quelques semaines de pratique régulière.",
+                    text = "La surcharge progressive est la clé du renforcement musculaire. Comme n'importe quel autre muscle, le muscle pubo-coccygien (PC) s'adapte à l'intensité de la tension qui lui est imposée.\n\n" +
+                            "La phase 1 pose les fondations neuromusculaires. La phase 2 améliore l'endurance via des contractions de 5s et l'exercice ascenseur. La phase 3 intègre le contrôle actif en situation debout couplé à la respiration diaphragmatique. La phase 4 consolide le contrôle de maintenance.",
                     fontSize = 11.sp,
                     color = MediumGray,
                     lineHeight = 16.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun ReconditionnementCerebralSection(viewModel: OperationsViewModel) {
+    val todayStr = viewModel.getTodayDate()
+    val urgeSurfLogs by viewModel.urgeSurfLogs.collectAsState()
+    val delayTrainingLogs by viewModel.delayTrainingLogs.collectAsState()
+
+    var isEducationalExpanded by remember { mutableStateOf(false) }
+
+    var isSurfRunning by remember { mutableStateOf(false) }
+    var surfDurationMinutes by remember { mutableStateOf(15) }
+    var surfSecondsLeft by remember { mutableStateOf(15 * 60) }
+    var surfTotalSeconds by remember { mutableStateOf(15 * 60) }
+
+    val surfScaleValue = remember { Animatable(1f) }
+
+    LaunchedEffect(isSurfRunning) {
+        if (!isSurfRunning) {
+            surfScaleValue.animateTo(1f)
+        }
+    }
+
+    LaunchedEffect(isSurfRunning, surfSecondsLeft) {
+        if (isSurfRunning && surfSecondsLeft > 0) {
+            val progressPercent = (surfTotalSeconds - surfSecondsLeft).toFloat() / surfTotalSeconds.toFloat()
+            val targetScale = 1f + 0.15f * kotlin.math.sin((surfSecondsLeft.toFloat() * 2 * Math.PI / 10f)).toFloat()
+            surfScaleValue.animateTo(targetScale, animationSpec = tween(1000, easing = LinearEasing))
+        }
+    }
+
+    LaunchedEffect(isSurfRunning) {
+        if (isSurfRunning) {
+            while (surfSecondsLeft > 0) {
+                delay(1000)
+                surfSecondsLeft--
+            }
+            isSurfRunning = false
+            viewModel.insertUrgeSurfLog(surfDurationMinutes)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isEducationalExpanded = !isEducationalExpanded },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Circuit de la Récompense & Tolérance au Délai",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = if (isEducationalExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Expand",
+                        tint = GoldClassic
+                    )
+                }
+
+                if (isEducationalExpanded) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider(color = LightGrayDivider)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "L'exposition répétée à une gratification rapide et intense (stimulation compulsive, pornographie, scrolling) désensibilise le circuit de récompense et réduit la tolérance au délai. Cela contribue directement au réflexe d'éjaculer rapidement plutôt que de prolonger le contrôle.\n\n" +
+                                "Ce circuit neurologique se reconditionne progressivement, comme un muscle, via une pratique régulière du délai volontaire. En apprenant à tolérer l'inconfort d'une impulsion sans la satisfaire immédiatement, vous renforcez le contrôle cortical sur vos réflexes physiques.",
+                        fontSize = 12.sp,
+                        color = MediumGray,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        }
+
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Outil 1 : Surf de l'Urgence (Urge Surfing)",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Text(
+                    text = "Une technique clinique prouvée pour traverser les envies compulsives ou impulsions sans céder. L'envie monte, atteint un pic, puis s'éteint.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                if (!isSurfRunning) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Durée : ${surfDurationMinutes} minutes", fontSize = 12.sp, color = Anthracite)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(15, 20).forEach { mins ->
+                                val isSelected = surfDurationMinutes == mins
+                                Box(
+                                    modifier = Modifier
+                                        .background(if (isSelected) LightBeige else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (isSelected) GoldClassic else LightGrayDivider, RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            surfDurationMinutes = mins
+                                            surfSecondsLeft = mins * 60
+                                            surfTotalSeconds = mins * 60
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "$mins min",
+                                        fontSize = 11.sp,
+                                        color = if (isSelected) GoldClassic else MediumGray,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    GoldGradientButton(
+                        text = "Démarrer un exercice",
+                        onClick = {
+                            surfSecondsLeft = surfDurationMinutes * 60
+                            surfTotalSeconds = surfDurationMinutes * 60
+                            isSurfRunning = true
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("start_urge_surf_button")
+                    )
+                } else {
+                    val elapsedSeconds = surfTotalSeconds - surfSecondsLeft
+                    val progressRatio = elapsedSeconds.toFloat() / surfTotalSeconds.toFloat()
+
+                    val guideMessage = when {
+                        progressRatio < 0.2f -> "Observe l'envie sans agir dessus. Elle commence à monter doucement. Respire amplement par le ventre."
+                        progressRatio < 0.5f -> "L'envie s'intensifie. C'est normal. Imagine cette envie comme une vague de l'océan sur laquelle tu surfes, sans essayer de la combattre ni de la nourrir."
+                        progressRatio < 0.75f -> "L'intensité approche de son maximum. Respire au cœur de la sensation. Elle va culminer et redescendre d'elle-même. Reste simple observateur."
+                        else -> "La sensation reflue et perd de sa puissance. Tu as traversé la tempête sans céder. Savoure ce calme retrouvé."
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(160.dp)
+                                .graphicsLayer {
+                                    scaleX = surfScaleValue.value
+                                    scaleY = surfScaleValue.value
+                                }
+                                .background(
+                                    color = GoldClassic.copy(alpha = 0.1f),
+                                    shape = CircleShape
+                                )
+                                .border(2.dp, GoldClassic, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val mins = surfSecondsLeft / 60
+                            val secs = surfSecondsLeft % 60
+                            Text(
+                                text = String.format(Locale.US, "%02d:%02d", mins, secs),
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Anthracite
+                            )
+                        }
+
+                        Text(
+                            text = guideMessage,
+                            fontSize = 12.sp,
+                            color = Anthracite,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+
+                        Button(
+                            onClick = { isSurfRunning = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Arrêter l'exercice", color = Color.White)
+                        }
+                    }
+                }
+
+                if (urgeSurfLogs.isNotEmpty()) {
+                    Divider(color = LightGrayDivider)
+                    Text("Historique des vagues surfées :", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        urgeSurfLogs.take(5).forEach { log ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Session de ${log.durationMinutes} min",
+                                    fontSize = 11.sp,
+                                    color = Anthracite
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = log.date,
+                                        fontSize = 11.sp,
+                                        color = MediumGray
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    IconButton(
+                                        onClick = { viewModel.deleteUrgeSurfLog(log) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Supprimer",
+                                            tint = Color(0xFFC62828).copy(alpha = 0.7f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        val todayChallenge = DelayTrainingChallenges.getChallengeForDay(todayStr)
+        val todayLog = delayTrainingLogs.firstOrNull { it.date == todayStr }
+        val isTodayChallengeCompleted = todayLog?.completed == true
+
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Outil 2 : Entraînement au Délai Quotidien",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Text(
+                    text = "Pratiquez la gratification différée de manière volontaire à travers de petits exercices quotidiens non sexuels pour muscler votre volonté corticale.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightGrayBg, RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "DÉFI DU JOUR :",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic
+                        )
+                        Text(
+                            text = todayChallenge,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Défi complété aujourd'hui",
+                        fontSize = 12.sp,
+                        color = Anthracite,
+                        fontWeight = FontWeight.Bold
+                    )
+                    PremiumCheckbox(
+                        checked = isTodayChallengeCompleted,
+                        onCheckedChange = { viewModel.toggleDelayTrainingLog(todayStr, todayChallenge) },
+                        modifier = Modifier.testTag("delay_challenge_checkbox")
+                    )
+                }
+
+                Divider(color = LightGrayDivider)
+                Text("Streak de régularité (7 derniers jours)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+
+                val last7Days = remember {
+                    val list = mutableListOf<String>()
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                    for (i in 6 downTo 0) {
+                        val c = Calendar.getInstance()
+                        c.add(Calendar.DAY_OF_YEAR, -i)
+                        list.add(sdf.format(c.time))
+                    }
+                    list
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    last7Days.forEach { date ->
+                        val logForDate = delayTrainingLogs.firstOrNull { it.date == date }
+                        val isCompleted = logForDate?.completed ?: false
+                        val dayLabel = viewModel.getDayOfWeekLabel(date)
+                        val isToday = date == todayStr
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (isCompleted) GoldClassic.copy(alpha = 0.1f) else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isToday) GoldClassic else LightGrayDivider,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = dayLabel,
+                                fontSize = 10.sp,
+                                color = if (isToday) GoldClassic else MediumGray,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Icon(
+                                imageVector = if (isCompleted) Icons.Filled.CheckCircle else Icons.Default.Circle,
+                                contentDescription = null,
+                                tint = if (isCompleted) GoldClassic else MediumGray.copy(alpha = 0.5f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -3645,6 +4340,8 @@ fun SommeilPage(viewModel: OperationsViewModel) {
     var wakeHour by remember { mutableStateOf("07") }
     var wakeMin by remember { mutableStateOf("00") }
     var selectedQuality by remember { mutableStateOf(3) }
+    var stretchingDone by remember { mutableStateOf(false) }
+    var screensOffBeforeBed by remember { mutableStateOf(false) }
 
     val avgSleep = remember(sleepLogs) {
         if (sleepLogs.isNotEmpty()) sleepLogs.map { it.durationHours }.average() else 0.0
@@ -3682,6 +4379,56 @@ fun SommeilPage(viewModel: OperationsViewModel) {
         }
     }
 
+    val rituelInsight = remember(sleepLogs) {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        val cal = java.util.Calendar.getInstance()
+        val fourteenDaysAgoList = mutableListOf<String>()
+        for (i in 0 until 14) {
+            val c = cal.clone() as java.util.Calendar
+            c.add(java.util.Calendar.DAY_OF_YEAR, -i)
+            fourteenDaysAgoList.add(sdf.format(c.time))
+        }
+
+        val logsLast14Days = sleepLogs.filter { it.date in fourteenDaysAgoList }
+        val withRitual = logsLast14Days.filter { it.stretchingDone && it.screensOffBeforeBed }
+        val withoutRitual = logsLast14Days.filter { !it.stretchingDone || !it.screensOffBeforeBed }
+
+        if (withRitual.size >= 5 && withoutRitual.size >= 5) {
+            val avgWith = withRitual.map { it.durationHours }.average()
+            val avgWithout = withoutRitual.map { it.durationHours }.average()
+            
+            val avgQualityWith = withRitual.map { it.quality }.average()
+            val avgQualityWithout = withoutRitual.map { it.quality }.average()
+
+            val diffHours = avgWith - avgWithout
+            val diffQuality = avgQualityWith - avgQualityWithout
+
+            val comparisonText = buildString {
+                append("En analysant les 14 derniers jours, ")
+                if (diffHours > 0) {
+                    append("votre sommeil dure en moyenne ${String.format("%.1f", diffHours)} h de plus les nuits précédées du rituel complet (étirements + écrans coupés). ")
+                } else if (diffHours < 0) {
+                    append("votre sommeil est en moyenne ${String.format("%.1f", -diffHours)} h plus court avec le rituel, mais peut-être plus réparateur. ")
+                } else {
+                    append("la durée de votre sommeil est identique avec ou sans rituel. ")
+                }
+
+                if (diffQuality > 0) {
+                    append("De plus, la qualité subjective de votre sommeil s'améliore de ${String.format("%.1f", diffQuality)} points / 5. ")
+                } else if (diffQuality < 0) {
+                    append("Cependant, la qualité subjective est légèrement inférieure de ${String.format("%.1f", -diffQuality)} points / 5. ")
+                } else {
+                    append("La qualité de sommeil perçue reste stable. ")
+                }
+                append("Ces observations valident que couper les écrans et s'étirer calment le tonus sympathique nocturne.")
+            }
+
+            Triple(avgWith, avgWithout, comparisonText)
+        } else {
+            null
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -3705,7 +4452,7 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                     color = GoldClassic
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Objectif recommandé : 7.5 - 8.0 heures", fontSize = 11.sp, color = MediumGray)
+                Text("Objectif recommandé : 7.5 heures (5 cycles)", fontSize = 11.sp, color = MediumGray)
             }
         }
 
@@ -3748,6 +4495,51 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Sans Magnésium", fontSize = 10.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                            Text("${String.format("%.1f", avgWithout)} h", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (rituelInsight != null) {
+            val (avgWith, avgWithout, text) = rituelInsight
+            OperationsCard(borderAccent = true) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Insight Rituel",
+                            tint = GoldClassic,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Insight Rituel : Étirements & Écrans",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = text,
+                        fontSize = 12.sp,
+                        color = MediumGray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Avec Rituel", fontSize = 10.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                            Text("${String.format("%.1f", avgWith)} h", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Sans Rituel", fontSize = 10.sp, color = MediumGray, fontWeight = FontWeight.Bold)
                             Text("${String.format("%.1f", avgWithout)} h", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Anthracite)
                         }
                     }
@@ -3833,6 +4625,35 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                     }
                 }
 
+                // Rituel du Soir Checkboxes
+                Text("Rituel du Soir", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { stretchingDone = !stretchingDone }
+                    ) {
+                        PremiumCheckbox(
+                            checked = stretchingDone,
+                            onCheckedChange = { stretchingDone = it },
+                            modifier = Modifier.testTag("stretching_checkbox")
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("🧘 Étirements/Souplesse faits ce soir", fontSize = 12.sp, color = Anthracite)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { screensOffBeforeBed = !screensOffBeforeBed }
+                    ) {
+                        PremiumCheckbox(
+                            checked = screensOffBeforeBed,
+                            onCheckedChange = { screensOffBeforeBed = it },
+                            modifier = Modifier.testTag("screens_off_checkbox")
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("🚫 Écrans coupés au moins 30 min avant le coucher", fontSize = 12.sp, color = Anthracite)
+                    }
+                }
+
                 GoldGradientButton(
                     text = "Valider la nuit",
                     onClick = {
@@ -3852,8 +4673,14 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                             "$bedHour:$bedMin",
                             "$wakeHour:$wakeMin",
                             finalHours,
-                            selectedQuality
+                            selectedQuality,
+                            stretchingDone = stretchingDone,
+                            screensOffBeforeBed = screensOffBeforeBed
                         )
+
+                        // Reset checkboxes
+                        stretchingDone = false
+                        screensOffBeforeBed = false
                     },
                     modifier = Modifier.fillMaxWidth().testTag("save_sleep_button")
                 )
@@ -3967,6 +4794,40 @@ fun SommeilPage(viewModel: OperationsViewModel) {
                                             contentDescription = null,
                                             tint = if (star <= log.quality) GoldClassic else LightGrayDivider.copy(alpha = 0.5f),
                                             modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "🧘",
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.alpha(if (log.stretchingDone) 1f else 0.3f)
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text(
+                                            text = "Étirements",
+                                            fontSize = 9.sp,
+                                            color = if (log.stretchingDone) GoldClassic else MediumGray.copy(alpha = 0.5f),
+                                            fontWeight = if (log.stretchingDone) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "🚫",
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.alpha(if (log.screensOffBeforeBed) 1f else 0.3f)
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text(
+                                            text = "Écrans",
+                                            fontSize = 9.sp,
+                                            color = if (log.screensOffBeforeBed) GoldClassic else MediumGray.copy(alpha = 0.5f),
+                                            fontWeight = if (log.screensOffBeforeBed) FontWeight.Bold else FontWeight.Normal
                                         )
                                     }
                                 }
@@ -4235,6 +5096,65 @@ fun SettingsPage(viewModel: OperationsViewModel) {
             }
         }
 
+        // --- PROGRAMME KEGEL START DATE CARD ---
+        val kegelStartDate by viewModel.kegelProgramStartDate.collectAsState()
+        val kegelContext = LocalContext.current
+        
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Programme Kegel Progressif", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                Text(
+                    text = "Configurez la date de début de votre programme progressif de 24 semaines. Votre phase actuelle sera automatiquement calculée sur cette base.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Date de début : $kegelStartDate",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+
+                    Button(
+                        onClick = {
+                            val calendar = Calendar.getInstance()
+                            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            try {
+                                val d = sdf.parse(kegelStartDate)
+                                if (d != null) calendar.time = d
+                            } catch (e: Exception) {}
+
+                            android.app.DatePickerDialog(
+                                kegelContext,
+                                { _, year, month, dayOfMonth ->
+                                    val newDate = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                                    viewModel.updateKegelProgramStartDate(newDate)
+                                },
+                                calendar.get(Calendar.YEAR),
+                                calendar.get(Calendar.MONTH),
+                                calendar.get(Calendar.DAY_OF_MONTH)
+                            ).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("select_kegel_start_date")
+                    ) {
+                        Text("Modifier", color = WhitePure, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // --- EXPORT / IMPORT CARD ---
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
@@ -4425,6 +5345,43 @@ fun SettingsPage(viewModel: OperationsViewModel) {
                         }
                     }
                 }
+            }
+        }
+
+        // --- CONFIGURATION DU FOYER CARD ---
+        val householdSize by viewModel.householdSize.collectAsState()
+        var householdSizeInput by remember { mutableStateOf(householdSize.toString()) }
+        LaunchedEffect(householdSize) {
+            householdSizeInput = householdSize.toString()
+        }
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Configuration de Survie", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                Text(
+                    text = "Configurez la taille de votre foyer. Toutes les cibles de planification d'autonomie (eau, céréales, conserves, etc.) de l'onglet 'Survive The Great Reset' s'adapteront automatiquement à cette valeur.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+                OutlinedTextField(
+                    value = householdSizeInput,
+                    onValueChange = { input ->
+                        if (input.isEmpty() || input.all { it.isDigit() }) {
+                            householdSizeInput = input
+                            val num = input.toIntOrNull()
+                            if (num != null && num > 0) {
+                                viewModel.updateHouseholdSize(num)
+                            }
+                        }
+                    },
+                    label = { Text("Taille du foyer (nombre de personnes)", fontSize = 12.sp) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                    modifier = Modifier.fillMaxWidth().testTag("household_size_input")
+                )
             }
         }
 
@@ -4758,6 +5715,10 @@ fun TestosteronePage(viewModel: OperationsViewModel) {
             val zincCount = recentSupps.count { it.zinc }
             val suppsOk = vitD3Count >= 4 && zincCount >= 4
 
+            // 6. Cardio count
+            val cardioCount = gymSessions.count { it.date in last7Days && it.muscleGroups.contains("Cardio", ignoreCase = true) }
+            val cardioOk = cardioCount >= 3
+
             listOf(
                 IndicatorItem(
                     label = "Sommeil Moyen",
@@ -4772,6 +5733,13 @@ fun TestosteronePage(viewModel: OperationsViewModel) {
                     desc = "Cible: ≥ 3 par semaine",
                     isGood = gymOk,
                     icon = Icons.Default.FitnessCenter
+                ),
+                IndicatorItem(
+                    label = "Cardio cette semaine",
+                    value = "$cardioCount / 4 séances",
+                    desc = "Cible: 4 par semaine",
+                    isGood = cardioOk,
+                    icon = Icons.AutoMirrored.Filled.DirectionsRun
                 ),
                 IndicatorItem(
                     label = "Niveau de Stress",
@@ -4973,3 +5941,1256 @@ data class LevierItem(
     val title: String,
     val content: String
 )
+
+@Composable
+fun CommunicationPage(viewModel: OperationsViewModel) {
+    val practiceLogs by viewModel.communicationPracticeLogs.collectAsState()
+    val todayStr = viewModel.getTodayDate()
+    val todaySkill = remember(todayStr) { com.example.data.CommunicationSkillsData.getSkillForDate(todayStr) }
+    
+    val todayLog = practiceLogs.firstOrNull { it.date == todayStr }
+    val isTodayPracticed = todayLog?.practiced == true
+
+    val last7Days = remember {
+        val list = mutableListOf<String>()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        for (i in 6 downTo 0) {
+            val c = Calendar.getInstance()
+            c.add(Calendar.DAY_OF_YEAR, -i)
+            list.add(sdf.format(c.time))
+        }
+        list
+    }
+
+    val practicedCount7Days = remember(practiceLogs, last7Days) {
+        practiceLogs.count { it.date in last7Days && it.practiced }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "Communication",
+            subtitle = "Parole, langage corporel et intelligence sociale"
+        )
+
+        // --- SKILL OF THE DAY CARD ---
+        OperationsCard(borderAccent = true) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "COMPÉTENCE DU JOUR",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic,
+                        letterSpacing = 1.sp
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Forum,
+                        contentDescription = null,
+                        tint = GoldClassic.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                Text(
+                    text = todaySkill,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite,
+                    lineHeight = 20.sp
+                )
+
+                Divider(color = LightGrayDivider)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.markSkillPracticed(todayStr, !isTodayPracticed) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    PremiumCheckbox(
+                        checked = isTodayPracticed,
+                        onCheckedChange = { viewModel.markSkillPracticed(todayStr, it) },
+                        modifier = Modifier.testTag("communication_today_checkbox")
+                    )
+                    Text(
+                        text = "Pratiqué aujourd'hui",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Anthracite
+                    )
+                }
+            }
+        }
+
+        // --- REGULARITY / 7-DAY HISTORY CARD ---
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "Pratique sur 7 jours",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$practicedCount7Days / 7 jours validés",
+                    fontSize = 11.sp,
+                    color = MediumGray
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    last7Days.forEach { date ->
+                        val label = viewModel.getDayOfWeekLabel(date)
+                        val log = practiceLogs.firstOrNull { it.date == date }
+                        val isDone = log?.practiced == true
+                        val isDayToday = date == todayStr
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 9.sp,
+                                color = if (isDayToday) GoldClassic else MediumGray,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .background(
+                                        if (isDone) GoldClassic else Color(0xFFF0F0F0),
+                                        CircleShape
+                                    )
+                                    .clickable {
+                                        viewModel.markSkillPracticed(date, !isDone)
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isDone) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Fait",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(MediumGray.copy(alpha = 0.5f), CircleShape)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- EDUCATIONAL MODULES ACCORDIONS ---
+        Text(
+            text = "Modules Éducatifs",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        // Module 1
+        var m1Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { m1Expanded = !m1Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Module 1 — Prise de parole",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (m1Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (m1Expanded) "Réduire" else "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (m1Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BulletPoint(
+                            boldText = "La pause stratégique",
+                            normalText = "le silence après une idée forte capte l'attention ; ne jamais le combler par un \"euh\" ou un mot de remplissage."
+                        )
+                        BulletPoint(
+                            boldText = "Débit maîtrisé",
+                            normalText = "ralentir le débit sur les points importants, accélérer légèrement sur les détails secondaires."
+                        )
+                    }
+                }
+            }
+        }
+
+        // Module 2
+        var m2Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { m2Expanded = !m2Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Module 2 — Modulation vocale",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (m2Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (m2Expanded) "Réduire" else "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (m2Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BulletPoint(
+                            boldText = "Ton descendant",
+                            normalText = "descendre le ton en fin de phrase affirmative (signal de confiance et d'autorité)."
+                        )
+                        BulletPoint(
+                            boldText = "Éviter l'uptalk",
+                            normalText = "éviter de monter le ton en fin de phrase non-interrogative (signal d'incertitude)."
+                        )
+                        BulletPoint(
+                            boldText = "Volume dynamique",
+                            normalText = "varier le volume pour souligner les points clés plutôt que parler sur un ton monotone."
+                        )
+                    }
+                }
+            }
+        }
+
+        // Module 3
+        var m3Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { m3Expanded = !m3Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Module 3 — Langage corporel",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (m3Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (m3Expanded) "Réduire" else "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (m3Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BulletPoint(
+                            boldText = "Posture ouverte",
+                            normalText = "mains visibles, éviter les bras croisés et les mains dans les poches."
+                        )
+                        BulletPoint(
+                            boldText = "Contact visuel",
+                            normalText = "maintenir un regard stable et naturel, sans fixer de façon insistante."
+                        )
+                        BulletPoint(
+                            boldText = "Gestes congruents",
+                            normalText = "aligner les gestes avec le message (gestes ouverts pour un discours confiant)."
+                        )
+                    }
+                }
+            }
+        }
+
+        // Module 4
+        var m4Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { m4Expanded = !m4Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Module 4 — Ne pas mal interpréter les autres",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (m4Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (m4Expanded) "Réduire" else "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (m4Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BulletPoint(
+                            boldText = "Fait vs Interprétation",
+                            normalText = "distinguer le fait observé de l'interprétation qu'on en fait (ex. \"il n'a pas répondu\" vs \"il m'ignore\")."
+                        )
+                        BulletPoint(
+                            boldText = "Curiosité d'abord",
+                            normalText = "poser une question ouverte plutôt que supposer une intention négative de la part de l'autre."
+                        )
+                    }
+                }
+            }
+        }
+
+        // Module 5
+        var m5Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { m5Expanded = !m5Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Module 5 — Intelligence émotionnelle",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (m5Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (m5Expanded) "Réduire" else "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (m5Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BulletPoint(
+                            boldText = "Labeling émotionnel",
+                            normalText = "nommer l'émotion ressentie avant de réagir pour désamorcer l'impulsivité."
+                        )
+                        BulletPoint(
+                            boldText = "Réponse choisie",
+                            normalText = "distinguer une réaction impulsive automatique d'une réponse réfléchie et choisie."
+                        )
+                        BulletPoint(
+                            boldText = "Écoute active",
+                            normalText = "développer l'empathie en reformulant précisément ce que l'autre vient de dire avant de répliquer."
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+fun BulletPoint(boldText: String, normalText: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 5.dp)
+                .size(6.dp)
+                .background(GoldClassic, CircleShape)
+        )
+        Text(
+            text = buildAnnotatedString {
+                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, color = Anthracite)) {
+                    append(boldText)
+                }
+                append(" : ")
+                withStyle(style = SpanStyle(color = MediumGray)) {
+                    append(normalText)
+                }
+            },
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SurviveGreatResetPage(viewModel: OperationsViewModel) {
+    val householdSize by viewModel.householdSize.collectAsState()
+    val stockItems by viewModel.survivalStockItems.collectAsState()
+
+    val targets = remember(householdSize) { SurvivalCalculator.calculateTargets(householdSize) }
+
+    val categoryTotals = remember(stockItems) {
+        stockItems.groupBy { it.category }.mapValues { entry ->
+            entry.value.sumOf { it.quantity.toDouble() }.toFloat()
+        }
+    }
+
+    val categories = remember {
+        listOf(
+            "Eau", "Céréales", "Légumineuses", "Conserves", "Graisses",
+            "Sucre", "Lait en poudre", "Sel", "Hygiène", "Médical"
+        )
+    }
+
+    val todayStr = remember {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        sdf.format(Date())
+    }
+
+    // --- FORM STATE ---
+    var isFormExpanded by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf("Céréales") }
+    var itemNameInput by remember { mutableStateOf("") }
+    var itemQtyInput by remember { mutableStateOf("") }
+    var itemUnitInput by remember { mutableStateOf("kg") }
+    var purchaseDateInput by remember { mutableStateOf(todayStr) }
+    var expiryDateInput by remember { mutableStateOf("") }
+    var selectedStorageMethod by remember { mutableStateOf("Sac Mylar + absorbeur O2") }
+
+    var categoryDropdownExpanded by remember { mutableStateOf(false) }
+    var storageDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Update unit automatically based on category selection
+    LaunchedEffect(selectedCategory) {
+        itemUnitInput = when (selectedCategory) {
+            "Eau", "Graisses" -> "L"
+            "Hygiène", "Médical" -> "unités"
+            else -> "kg"
+        }
+    }
+
+    // Helper functions
+    fun formatQty(value: Float): String {
+        return if (value % 1f == 0f) {
+            value.toInt().toString()
+        } else {
+            String.format(Locale.US, "%.1f", value)
+        }
+    }
+
+    fun isExpiringSoon(expiryDateStr: String?): Boolean {
+        if (expiryDateStr.isNullOrBlank()) return false
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val expiryDate = sdf.parse(expiryDateStr) ?: return false
+            val today = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.time
+            val diffMillis = expiryDate.time - today.time
+            val diffDays = diffMillis / (1000 * 60 * 60 * 24)
+            diffDays in 0..59
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun getCategoryIcon(category: String): ImageVector {
+        return when (category) {
+            "Eau" -> Icons.Default.Opacity
+            "Céréales" -> Icons.Default.Eco
+            "Légumineuses" -> Icons.Default.Spa
+            "Conserves" -> Icons.Default.Restaurant
+            "Graisses" -> Icons.Default.Opacity
+            "Sucre" -> Icons.Default.Cake
+            "Lait en poudre" -> Icons.Default.LocalCafe
+            "Sel" -> Icons.Default.Science
+            "Hygiène" -> Icons.Default.Face
+            "Médical" -> Icons.Default.Healing
+            else -> Icons.Default.Inventory2
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageHeader(
+            title = "Survive The Great Reset",
+            subtitle = "Planification d'autonomie et gestion des stocks de secours"
+        )
+
+        // --- ADD ITEM COLLAPSIBLE FORM CARD ---
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isFormExpanded = !isFormExpanded },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = GoldClassic
+                        )
+                        Text(
+                            text = "Ajouter un article au stock",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isFormExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isFormExpanded) "Réduire" else "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                if (isFormExpanded) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Category Dropdown
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = selectedCategory,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Catégorie", fontSize = 12.sp) },
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                                trailingIcon = {
+                                    IconButton(onClick = { categoryDropdownExpanded = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { categoryDropdownExpanded = true }
+                                    .testTag("form_category_input")
+                            )
+                            DropdownMenu(
+                                expanded = categoryDropdownExpanded,
+                                onDismissRequest = { categoryDropdownExpanded = false }
+                            ) {
+                                categories.forEach { cat ->
+                                    DropdownMenuItem(
+                                        text = { Text(cat) },
+                                        onClick = {
+                                            selectedCategory = cat
+                                            categoryDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Name
+                        OutlinedTextField(
+                            value = itemNameInput,
+                            onValueChange = { itemNameInput = it },
+                            label = { Text("Nom de l'article (ex: Riz complet, Bidon d'eau)", fontSize = 12.sp) },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("form_name_input")
+                        )
+
+                        // Quantity & Unit Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = itemQtyInput,
+                                onValueChange = { input ->
+                                    if (input.isEmpty() || input.all { it.isDigit() || it == '.' }) {
+                                        itemQtyInput = input
+                                    }
+                                },
+                                label = { Text("Quantité", fontSize = 12.sp) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("form_quantity_input")
+                            )
+
+                            OutlinedTextField(
+                                value = itemUnitInput,
+                                onValueChange = { itemUnitInput = it },
+                                label = { Text("Unité", fontSize = 12.sp) },
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("form_unit_input")
+                            )
+                        }
+
+                        // Storage Method Dropdown
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = selectedStorageMethod,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Méthode de conservation", fontSize = 12.sp) },
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                                trailingIcon = {
+                                    IconButton(onClick = { storageDropdownExpanded = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { storageDropdownExpanded = true }
+                                    .testTag("form_storage_input")
+                            )
+                            DropdownMenu(
+                                expanded = storageDropdownExpanded,
+                                onDismissRequest = { storageDropdownExpanded = false }
+                            ) {
+                                listOf(
+                                    "Sac Mylar + absorbeur O2", "Seau alimentaire", "Conserve standard",
+                                    "Bidon scellé", "Bouteille commerciale", "Autre"
+                                ).forEach { method ->
+                                    DropdownMenuItem(
+                                        text = { Text(method) },
+                                        onClick = {
+                                            selectedStorageMethod = method
+                                            storageDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Dates Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = purchaseDateInput,
+                                onValueChange = { purchaseDateInput = it },
+                                label = { Text("Date d'achat (AAAA-MM-JJ)", fontSize = 11.sp) },
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("form_purchase_date_input")
+                            )
+
+                            OutlinedTextField(
+                                value = expiryDateInput,
+                                onValueChange = { expiryDateInput = it },
+                                label = { Text("Expiration (optionnel)", fontSize = 11.sp) },
+                                placeholder = { Text("AAAA-MM-JJ", fontSize = 11.sp) },
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("form_expiry_date_input")
+                            )
+                        }
+
+                        // Add Button
+                        Button(
+                            onClick = {
+                                val qty = itemQtyInput.toFloatOrNull()
+                                if (qty != null && itemNameInput.isNotBlank()) {
+                                    viewModel.insertSurvivalStockItem(
+                                        category = selectedCategory,
+                                        name = itemNameInput.trim(),
+                                        quantity = qty,
+                                        unit = itemUnitInput.trim(),
+                                        purchaseDate = purchaseDateInput.trim(),
+                                        estimatedExpiryDate = expiryDateInput.trim().ifEmpty { null },
+                                        storageMethod = selectedStorageMethod
+                                    )
+                                    // Reset fields
+                                    itemNameInput = ""
+                                    itemQtyInput = ""
+                                    expiryDateInput = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                                .testTag("form_submit_button")
+                        ) {
+                            Text("Ajouter au stock", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- WATER EXPLANATION / PERMANENT WARNING BANNER ---
+        val waterTotalLitres = householdSize * 12 * 365
+        OperationsCard(borderAccent = true) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LightBeige.copy(alpha = 0.4f))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Attention",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Stratégie de l'eau : Stock vs Autonomie",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                }
+
+                Text(
+                    text = "Pour un foyer de $householdSize personnes sur 365 jours, la consommation totale (boisson, cuisine, hygiène) dépasse $waterTotalLitres litres — un volume impossible à stocker dans une habitation standard. L'objectif ci-dessous est un stock tampon de 3 semaines. Pour couvrir le reste de l'année, prévois un système de filtration/purification (filtre céramique + charbon, ou osmose inverse) et si possible une captation d'eau de pluie.",
+                    fontSize = 12.sp,
+                    color = Anthracite,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        // --- CATEGORIES OVERVIEW ---
+        Text(
+            text = "Inventaire par Catégorie",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        categories.forEach { cat ->
+            val targetInfo = targets[cat]
+            if (targetInfo != null) {
+                val actualQty = categoryTotals[cat] ?: 0f
+                val targetQty = targetInfo.targetQuantity
+                val progressPercent = if (targetQty > 0) (actualQty / targetQty) * 100f else 0f
+                val safePercent = progressPercent.coerceIn(0f, 100f)
+
+                val isGoalReached = progressPercent >= 80f
+                val badgeColor = if (isGoalReached) GoldClassic else MediumGray
+                val badgeText = if (isGoalReached) "Optimal (≥80%)" else "À compléter"
+
+                var isCategoryExpanded by remember { mutableStateOf(false) }
+                var showWhyDialog by remember { mutableStateOf(false) }
+
+                // Retrieve and sort items in this category
+                val catItems = stockItems.filter { it.category == cat }
+                    .sortedWith(compareBy<SurvivalStockItem> { it.estimatedExpiryDate == null }
+                        .thenBy { it.estimatedExpiryDate })
+
+                OperationsCard {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Title row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = getCategoryIcon(cat),
+                                    contentDescription = null,
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = cat,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Anthracite
+                                )
+                                IconButton(
+                                    onClick = { showWhyDialog = true },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Pourquoi ?",
+                                        tint = MediumGray,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            // Status Badge
+                            Box(
+                                modifier = Modifier
+                                    .background(badgeColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                                    .border(0.5.dp, badgeColor.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = badgeText,
+                                    fontSize = 9.sp,
+                                    color = badgeColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Quantities
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            Text(
+                                text = "Possédé : ${formatQty(actualQty)} / ${formatQty(targetQty)} ${targetInfo.unit}",
+                                fontSize = 12.sp,
+                                color = Anthracite,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            AnimatedCountText(
+                                value = progressPercent.toInt(),
+                                suffix = "%",
+                                fontSize = 12.sp,
+                                color = if (isGoalReached) GoldClassic else MediumGray,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Progress bar
+                        LinearProgressIndicator(
+                            progress = { safePercent / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = GoldClassic,
+                            trackColor = LightBeige
+                        )
+
+                        // Collapsible Inventaire list
+                        Divider(color = LightGrayDivider)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isCategoryExpanded = !isCategoryExpanded }
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Voir l'inventaire (${catItems.size} articles)",
+                                fontSize = 12.sp,
+                                color = GoldClassic,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Icon(
+                                imageVector = if (isCategoryExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = GoldClassic,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        if (isCategoryExpanded) {
+                            if (catItems.isEmpty()) {
+                                Text(
+                                    text = "Aucun article enregistré dans cette catégorie.",
+                                    fontSize = 11.sp,
+                                    color = MediumGray,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            } else {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                ) {
+                                    catItems.forEach { item ->
+                                        val expiring = isExpiringSoon(item.estimatedExpiryDate)
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(
+                                                    if (expiring) Color(0xFFFFF8E1) else LightBeige.copy(alpha = 0.2f),
+                                                    RoundedCornerShape(6.dp)
+                                                )
+                                                .border(0.5.dp, LightGrayDivider, RoundedCornerShape(6.dp))
+                                                .padding(10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = item.name,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Anthracite
+                                                    )
+                                                    if (expiring) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .background(Color(0xFFFFB300), RoundedCornerShape(3.dp))
+                                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = "Exp. bientôt",
+                                                                fontSize = 8.sp,
+                                                                color = Color.White,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = "${formatQty(item.quantity)} ${item.unit} • ${item.storageMethod}",
+                                                    fontSize = 11.sp,
+                                                    color = MediumGray
+                                                )
+                                                Text(
+                                                    text = buildAnnotatedString {
+                                                        append("Acheté le : ${item.purchaseDate}")
+                                                        if (item.estimatedExpiryDate != null) {
+                                                            append(" • Expire le : ${item.estimatedExpiryDate}")
+                                                        }
+                                                    },
+                                                    fontSize = 10.sp,
+                                                    color = MediumGray
+                                                )
+                                            }
+
+                                            IconButton(
+                                                onClick = { viewModel.deleteSurvivalStockItem(item) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Supprimer",
+                                                    tint = Color(0xFFC62828),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Info "Pourquoi" Dialog
+                if (showWhyDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showWhyDialog = false },
+                        title = { Text(text = "Pourquoi stocker : $cat") },
+                        text = {
+                            Text(
+                                text = targetInfo.why,
+                                fontSize = 14.sp,
+                                color = Anthracite,
+                                lineHeight = 20.sp
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showWhyDialog = false }) {
+                                Text("Compris", color = GoldClassic, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        // --- CONSERVATION EDUCATION SECTION ---
+        Text(
+            text = "Méthodes de Conservation",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        var isEduExpanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isEduExpanded = !isEduExpanded },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Book,
+                            contentDescription = null,
+                            tint = GoldClassic
+                        )
+                        Text(
+                            text = "Comment garder vos stocks frais ?",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isEduExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isEduExpanded) "Réduire" else "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                if (isEduExpanded) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        BulletPoint(
+                            boldText = "Céréales & légumineuses sèches",
+                            normalText = "Sacs Mylar de qualité alimentaire fermés à chaud avec un absorbeur d'oxygène (O2), placés dans des seaux alimentaires à couvercle hermétique ou gamma seal. Durée de conservation estimée : 20 à 30 ans si stockés au frais (< 21°C), au sec et à l'obscurité."
+                        )
+
+                        BulletPoint(
+                            boldText = "Conserves standard",
+                            normalText = "Appliquez rigoureusement la rotation FIFO (First In, First Out / Premier entré, premier sorti). Inspectez visuellement chaque boîte avant consommation : rejetez impitoyablement toute conserve bombée, rouillée ou cabossée au niveau des sertis. Durée de conservation utile : 2 à 5 ans."
+                        )
+
+                        BulletPoint(
+                            boldText = "Aliments lyophilisés",
+                            normalText = "Excellente alternative ultra-légère. Se conservent plus de 25 ans sous emballage scellé d'origine. Les conditions idéales restent identiques aux céréales : au frais, au sec et à l'obscurité."
+                        )
+
+                        BulletPoint(
+                            boldText = "Eau stockée",
+                            normalText = "Effectuez une rotation tous les 6 à 12 mois si stockée dans des bouteilles plastiques commerciales d'origine. Pour le stockage d'eau en bidons ou vrac, traitez avec de l'eau de Javel pure non parfumée (2 à 4 gouttes par litre) et conservez dans des contenants opaques de qualité alimentaire à l'abri de la lumière."
+                        )
+
+                        BulletPoint(
+                            boldText = "Règle générale de préservation",
+                            normalText = "Les 5 ennemis mortels du stock de survie sont la Chaleur, l'Humidité, l'Oxygène, la Lumière et les Nuisibles. Visez toujours un stockage frais, sec, sombre, hermétique et hors de portée des rongeurs ou insectes."
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+fun SkeletonLoader(
+    modifier: Modifier = Modifier,
+    height: androidx.compose.ui.unit.Dp = 80.dp,
+    shape: androidx.compose.ui.graphics.Shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "Skeleton")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "SkeletonAlpha"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .alpha(alpha)
+            .background(LightGrayDivider, shape)
+    )
+}
+
+@Composable
+fun AnimatedCountText(
+    value: Int,
+    modifier: Modifier = Modifier,
+    prefix: String = "",
+    suffix: String = "",
+    fontSize: androidx.compose.ui.unit.TextUnit = 28.sp,
+    fontWeight: FontWeight = FontWeight.Bold,
+    color: Color = GoldClassic
+) {
+    val animatedValue = animateIntAsState(
+        targetValue = value,
+        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+        label = "CounterAnimation"
+    )
+
+    Text(
+        text = "$prefix${animatedValue.value}$suffix",
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        color = color,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun PremiumCheckbox(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+    val scale by animateFloatAsState(
+        targetValue = if (checked) 1.05f else 1f,
+        animationSpec = tween(durationMillis = 150),
+        label = "CheckboxScale"
+    )
+    val color by animateColorAsState(
+        targetValue = if (checked) GoldClassic else MediumGray.copy(alpha = 0.4f),
+        animationSpec = tween(durationMillis = 180),
+        label = "CheckboxColor"
+    )
+
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .size(22.dp)
+            .border(
+                width = 1.5.dp,
+                color = color,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+            )
+            .background(
+                color = if (checked) GoldClassic.copy(alpha = 0.08f) else Color.Transparent,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+            )
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onCheckedChange(!checked)
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = checked,
+            enter = fadeIn(animationSpec = tween(120)) + scaleIn(animationSpec = tween(120)),
+            exit = fadeOut(animationSpec = tween(120)) + scaleOut(animationSpec = tween(120))
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = GoldClassic,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+
+

@@ -13,6 +13,8 @@ class BootReceiver : BroadcastReceiver() {
             WeeklyReportScheduler.schedule(context)
             SunExposureScheduler.schedule(context)
             DigestScheduler.scheduleAll(context)
+            SupplementCheckScheduler.scheduleAll(context)
+            CommunicationSkillScheduler.schedule(context)
         }
     }
 }

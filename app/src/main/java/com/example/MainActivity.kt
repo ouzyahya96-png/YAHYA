@@ -7,10 +7,13 @@ import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -60,6 +64,8 @@ class MainActivity : FragmentActivity() {
         com.example.data.WeeklyReportScheduler.schedule(this)
         com.example.data.SunExposureScheduler.schedule(this)
         com.example.data.DigestScheduler.scheduleAll(this)
+        com.example.data.SupplementCheckScheduler.scheduleAll(this)
+        com.example.data.CommunicationSkillScheduler.schedule(this)
 
         setContent {
             MyApplicationTheme {
@@ -313,12 +319,14 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
             NavigationItem("GYM", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter, 4),
             NavigationItem("Récupération", Icons.Filled.FlashOn, Icons.Outlined.FlashOn, 5),
             NavigationItem("Testostérone", Icons.Filled.WbSunny, Icons.Outlined.WbSunny, 6),
-            NavigationItem("Sommeil", Icons.Filled.NightsStay, Icons.Outlined.NightsStay, 7)
+            NavigationItem("Communication", Icons.Filled.Forum, Icons.Outlined.Forum, 7),
+            NavigationItem("Sommeil", Icons.Filled.NightsStay, Icons.Outlined.NightsStay, 8),
+            NavigationItem("Great Reset", Icons.Filled.Inventory2, Icons.Outlined.Inventory2, 9)
         )
     }
 
     val settingsItem = remember {
-        NavigationItem("Paramètres", Icons.Filled.Settings, Icons.Outlined.Settings, 8)
+        NavigationItem("Paramètres", Icons.Filled.Settings, Icons.Outlined.Settings, 10)
     }
 
     Row(modifier = Modifier.fillMaxSize()) {
@@ -371,7 +379,10 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                         item = item,
                         isActive = selectedPageIndex == item.pageIndex,
                         isSidebarOpen = isSidebarOpen,
-                        onClick = { selectedPageIndex = item.pageIndex }
+                        onClick = { 
+                            selectedPageIndex = item.pageIndex 
+                            isSidebarOpen = false
+                        }
                     )
                 }
             }
@@ -387,7 +398,10 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                 item = settingsItem,
                 isActive = selectedPageIndex == settingsItem.pageIndex,
                 isSidebarOpen = isSidebarOpen,
-                onClick = { selectedPageIndex = settingsItem.pageIndex }
+                onClick = { 
+                    selectedPageIndex = settingsItem.pageIndex 
+                    isSidebarOpen = false
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -400,16 +414,34 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                 .fillMaxHeight()
                 .background(Color.White)
         ) {
-            when (selectedPageIndex) {
-                0 -> DashboardPage(viewModel, onNavigateToPage = { selectedPageIndex = it })
-                1 -> TodoListPage(viewModel)
-                2 -> CalendrierPage(viewModel)
-                3 -> ComplementsPage(viewModel)
-                4 -> GymPage(viewModel)
-                5 -> RecoveryPage(viewModel)
-                6 -> TestosteronePage(viewModel)
-                7 -> SommeilPage(viewModel)
-                8 -> SettingsPage(viewModel)
+            AnimatedContent(
+                targetState = selectedPageIndex,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(220)) + slideInHorizontally(animationSpec = tween(220)) { width -> width / 20 }) togetherWith
+                    (fadeOut(animationSpec = tween(220)) + slideOutHorizontally(animationSpec = tween(220)) { width -> -width / 20 })
+                },
+                label = "PageTransition"
+            ) { targetIndex ->
+                when (targetIndex) {
+                    0 -> DashboardPage(viewModel, onNavigateToPage = { 
+                        selectedPageIndex = it 
+                        isSidebarOpen = false
+                    })
+                    1 -> TodoListPage(viewModel)
+                    2 -> CalendrierPage(viewModel)
+                    3 -> ComplementsPage(viewModel)
+                    4 -> GymPage(viewModel)
+                    5 -> RecoveryPage(viewModel)
+                    6 -> TestosteronePage(viewModel)
+                    7 -> CommunicationPage(viewModel)
+                    8 -> SommeilPage(viewModel)
+                    9 -> SurviveGreatResetPage(viewModel)
+                    10 -> SettingsPage(viewModel)
+                    else -> DashboardPage(viewModel, onNavigateToPage = { 
+                        selectedPageIndex = it 
+                        isSidebarOpen = false
+                    })
+                }
             }
         }
     }
@@ -426,7 +458,7 @@ fun SidebarItem(
         modifier = Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .clickable { onClick() }
+            .pressClickEffect { onClick() }
             .background(if (isActive) LightBeige else Color.Transparent),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -467,4 +499,24 @@ fun SidebarItem(
             )
         }
     }
+}
+
+@Composable
+fun Modifier.pressClickEffect(
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    onClick: () -> Unit
+): Modifier {
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = tween(durationMillis = 100),
+        label = "PressScale"
+    )
+    return this
+        .scale(scale)
+        .clickable(
+            interactionSource = interactionSource,
+            indication = androidx.compose.foundation.LocalIndication.current,
+            onClick = onClick
+        )
 }

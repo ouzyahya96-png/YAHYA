@@ -52,6 +52,35 @@
             android:enabled="true"
             android:exported="false" />
 
+        <receiver android:name="com.example.data.CommunicationSkillReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ACTION_COMM_SKILL_CHECK" />
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name="com.example.data.SupplementCheckReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ACTION_SUPPLEMENT_CHECK" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Home screen widget -->
+        <receiver android:name="com.example.widget.OperationsWidget"
+            android:exported="true"
+            android:label="Directeur des Opérations">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.widget.ACTION_UPDATE_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_operations_info" />
+        </receiver>
+
         <receiver android:name="com.example.data.BootReceiver"
             android:enabled="true"
             android:exported="true">

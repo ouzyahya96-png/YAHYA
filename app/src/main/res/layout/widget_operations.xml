@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_widget"
+    android:padding="14dp"
+    android:gravity="center_vertical">
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="OPÉRATIONS"
+        android:textColor="@color/gold_classic"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.1"
+        android:gravity="center"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/widget_streak"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Jour 0 / 180"
+        android:textColor="@color/gold_classic"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="8dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/light_gray_divider"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/widget_tasks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="-- tâches restantes"
+        android:textColor="@color/anthracite"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/widget_next_event"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Aucun événement à venir"
+        android:textColor="@color/medium_gray"
+        android:textSize="11sp"
+        android:gravity="center"
+        android:ellipsize="end"
+        android:maxLines="1"/>
+
+</LinearLayout>

@@ -57,7 +57,25 @@ class OperationsViewModel(
     val sunExposureLogs: StateFlow<List<SunExposureLog>> = repository.sunExposureLogsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val communicationPracticeLogs: StateFlow<List<CommunicationPracticeLog>> = repository.communicationPracticeLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val survivalStockItems: StateFlow<List<SurvivalStockItem>> = repository.survivalStockItemsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val urgeSurfLogs: StateFlow<List<UrgeSurfLog>> = repository.urgeSurfLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val delayTrainingLogs: StateFlow<List<DelayTrainingLog>> = repository.delayTrainingLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- Settings / Preferences State ---
+    private val _householdSize = MutableStateFlow(sharedPrefs.getInt("household_size", 10))
+    val householdSize: StateFlow<Int> = _householdSize.asStateFlow()
+
+    private val _kegelProgramStartDate = MutableStateFlow(sharedPrefs.getString("kegel_program_start_date", "") ?: "")
+    val kegelProgramStartDate: StateFlow<String> = _kegelProgramStartDate.asStateFlow()
+
     private val _geminiApiKey = MutableStateFlow<String>(sharedPrefs.getString("gemini_api_key", "") ?: "")
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
 
@@ -232,6 +250,7 @@ class OperationsViewModel(
                 done = false
             )
             repository.insertTask(task)
+            com.example.widget.OperationsWidget.triggerManualUpdate(application)
 
             // Trigger notification if scheduled for a time today
             if (time != null && date == getTodayDate() && _notificationsEnabled.value) {
@@ -249,6 +268,7 @@ class OperationsViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val updated = task.copy(done = !task.done)
             repository.updateTask(updated)
+            com.example.widget.OperationsWidget.triggerManualUpdate(application)
             if (updated.done && _notificationsEnabled.value) {
                 // Trigger immediate simple notification/sound for motivation
                 NotificationHelper.triggerNotification(
@@ -264,6 +284,7 @@ class OperationsViewModel(
     fun deleteTask(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteTaskById(id)
+            com.example.widget.OperationsWidget.triggerManualUpdate(application)
         }
     }
 
@@ -476,6 +497,20 @@ class OperationsViewModel(
         }
     }
 
+    // --- Communication Actions ---
+    fun markSkillPracticed(date: String, practiced: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = repository.getCommunicationPracticeLogByDate(date)
+            val skillText = existing?.skillText ?: com.example.data.CommunicationSkillsData.getSkillForDate(date)
+            val newLog = com.example.data.CommunicationPracticeLog(
+                date = date,
+                skillText = skillText,
+                practiced = practiced
+            )
+            repository.insertCommunicationPracticeLog(newLog)
+        }
+    }
+
     // --- Recovery Streak Actions ---
     fun resetRecoveryStreak(trigger: String? = null) {
         val today = getTodayDate()
@@ -499,6 +534,7 @@ class OperationsViewModel(
             // Reset current start to today
             sharedPrefs.edit().putString("current_streak_start", today).apply()
             _currentStreakStart.value = today
+            com.example.widget.OperationsWidget.triggerManualUpdate(application)
 
             if (_notificationsEnabled.value) {
                 NotificationHelper.triggerNotification(
@@ -518,14 +554,17 @@ class OperationsViewModel(
         _kegelRepCount.value = 0
         _kegelIsRunning.value = true
 
+        val startDate = getKegelProgramStartDateOrDefault()
+        val (phase, _) = KegelProgramCalculator.getCurrentPhase(startDate)
+
         val contractSeconds = when (variant) {
             "Rapides" -> 1
-            "Longues" -> 10
+            "Longues" -> phase.slowHoldSeconds
             else -> 5 // Standard
         }
         val relaxSeconds = when (variant) {
             "Rapides" -> 1
-            "Longues" -> 10
+            "Longues" -> phase.slowHoldSeconds
             else -> 5 // Standard
         }
 
@@ -562,8 +601,31 @@ class OperationsViewModel(
         _kegelIsRunning.value = false
         val today = getTodayDate()
         viewModelScope.launch(Dispatchers.IO) {
-            val log = KegelLog(date = today, done = true)
-            repository.insertKegelLog(log)
+            val currentLog = repository.getKegelLogByDate(today) ?: KegelLog(date = today)
+            val startDate = getKegelProgramStartDateOrDefault()
+            val (phase, _) = KegelProgramCalculator.getCurrentPhase(startDate)
+            val updatedLog = when (phase.sessionsPerDay) {
+                3 -> {
+                    if (!currentLog.morningDone) {
+                        currentLog.copy(morningDone = true, done = true)
+                    } else if (!currentLog.middayDone) {
+                        currentLog.copy(middayDone = true, done = true)
+                    } else {
+                        currentLog.copy(eveningDone = true, done = true)
+                    }
+                }
+                2 -> {
+                    if (!currentLog.morningDone) {
+                        currentLog.copy(morningDone = true, done = true)
+                    } else {
+                        currentLog.copy(eveningDone = true, done = true)
+                    }
+                }
+                else -> {
+                    currentLog.copy(done = true, morningDone = true)
+                }
+            }
+            repository.insertKegelLog(updatedLog)
 
             if (_notificationsEnabled.value) {
                 NotificationHelper.triggerNotification(
@@ -572,6 +634,85 @@ class OperationsViewModel(
                     "Votre routine Kegel quotidienne est validée !",
                     playSound = _soundEnabled.value
                 )
+            }
+        }
+    }
+
+    fun getKegelProgramStartDateOrDefault(): String {
+        var current = _kegelProgramStartDate.value
+        if (current.isBlank()) {
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            sharedPrefs.edit().putString("kegel_program_start_date", today).apply()
+            _kegelProgramStartDate.value = today
+            current = today
+        }
+        return current
+    }
+
+    fun updateKegelProgramStartDate(dateStr: String) {
+        sharedPrefs.edit().putString("kegel_program_start_date", dateStr).apply()
+        _kegelProgramStartDate.value = dateStr
+    }
+
+    fun toggleKegelLogSession(date: String, sessionType: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentLog = repository.getKegelLogByDate(date) ?: KegelLog(date = date)
+            val updatedLog = when (sessionType) {
+                "morning" -> {
+                    val newMorning = !currentLog.morningDone
+                    currentLog.copy(
+                        morningDone = newMorning,
+                        done = newMorning || currentLog.middayDone || currentLog.eveningDone
+                    )
+                }
+                "midday" -> {
+                    val newMidday = !currentLog.middayDone
+                    currentLog.copy(
+                        middayDone = newMidday,
+                        done = currentLog.morningDone || newMidday || currentLog.eveningDone
+                    )
+                }
+                "evening" -> {
+                    val newEvening = !currentLog.eveningDone
+                    currentLog.copy(
+                        eveningDone = newEvening,
+                        done = currentLog.morningDone || currentLog.middayDone || newEvening
+                    )
+                }
+                else -> {
+                    val newDone = !currentLog.done
+                    currentLog.copy(
+                        done = newDone,
+                        morningDone = newDone,
+                        middayDone = false,
+                        eveningDone = false
+                    )
+                }
+            }
+            repository.insertKegelLog(updatedLog)
+        }
+    }
+
+    fun insertUrgeSurfLog(durationMinutes: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val log = UrgeSurfLog(date = getTodayDate(), durationMinutes = durationMinutes)
+            repository.insertUrgeSurfLog(log)
+        }
+    }
+
+    fun deleteUrgeSurfLog(log: UrgeSurfLog) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteUrgeSurfLog(log)
+        }
+    }
+
+    fun toggleDelayTrainingLog(date: String, challengeText: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val log = repository.getDelayTrainingLogByDate(date)
+            if (log != null) {
+                repository.insertDelayTrainingLog(log.copy(completed = !log.completed))
+            } else {
+                repository.insertDelayTrainingLog(DelayTrainingLog(date = date, challengeText = challengeText, completed = true))
             }
         }
     }
@@ -654,7 +795,14 @@ class OperationsViewModel(
     }
 
     // --- Sleep Actions ---
-    fun addSleepLog(bedtime: String, waketime: String, durationHours: Float, quality: Int = 3) {
+    fun addSleepLog(
+        bedtime: String,
+        waketime: String,
+        durationHours: Float,
+        quality: Int = 3,
+        stretchingDone: Boolean = false,
+        screensOffBeforeBed: Boolean = false
+    ) {
         val today = getTodayDate()
         viewModelScope.launch(Dispatchers.IO) {
             val log = SleepLog(
@@ -662,7 +810,9 @@ class OperationsViewModel(
                 bedtime = bedtime,
                 waketime = waketime,
                 durationHours = durationHours,
-                quality = quality
+                quality = quality,
+                stretchingDone = stretchingDone,
+                screensOffBeforeBed = screensOffBeforeBed
             )
             repository.insertSleepLog(log)
         }
@@ -687,11 +837,44 @@ class OperationsViewModel(
             com.example.data.WeeklyReportScheduler.schedule(application)
             com.example.data.SunExposureScheduler.schedule(application)
             com.example.data.DigestScheduler.scheduleAll(application)
+            com.example.data.SupplementCheckScheduler.scheduleAll(application)
+            com.example.data.CommunicationSkillScheduler.schedule(application)
         } else {
             com.example.data.AffirmationScheduler.cancelAll(application)
             com.example.data.WeeklyReportScheduler.cancel(application)
             com.example.data.SunExposureScheduler.cancel(application)
             com.example.data.DigestScheduler.cancelAll(application)
+            com.example.data.SupplementCheckScheduler.cancelAll(application)
+            com.example.data.CommunicationSkillScheduler.cancel(application)
+        }
+    }
+
+    fun updateHouseholdSize(size: Int) {
+        val safeSize = size.coerceAtLeast(1)
+        sharedPrefs.edit()
+            .putInt("household_size", safeSize)
+            .apply()
+        _householdSize.value = safeSize
+    }
+
+    fun insertSurvivalStockItem(category: String, name: String, quantity: Float, unit: String, purchaseDate: String, estimatedExpiryDate: String?, storageMethod: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val item = SurvivalStockItem(
+                category = category,
+                name = name,
+                quantity = quantity,
+                unit = unit,
+                purchaseDate = purchaseDate,
+                estimatedExpiryDate = estimatedExpiryDate,
+                storageMethod = storageMethod
+            )
+            repository.insertSurvivalStockItem(item)
+        }
+    }
+
+    fun deleteSurvivalStockItem(item: SurvivalStockItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteSurvivalStockItem(item)
         }
     }
 
@@ -709,6 +892,7 @@ class OperationsViewModel(
             val today = getTodayDate()
             sharedPrefs.edit().putString("current_streak_start", today).apply()
             _currentStreakStart.value = today
+            com.example.widget.OperationsWidget.triggerManualUpdate(application)
         }
     }
 
@@ -717,7 +901,11 @@ class OperationsViewModel(
     }
 
     suspend fun importData(json: String): Boolean {
-        return com.example.data.DataExportManager.importFromJson(repository, json)
+        val success = com.example.data.DataExportManager.importFromJson(repository, json)
+        if (success) {
+            com.example.widget.OperationsWidget.triggerManualUpdate(application)
+        }
+        return success
     }
 
     // --- Gemini Daily Analysis ---
