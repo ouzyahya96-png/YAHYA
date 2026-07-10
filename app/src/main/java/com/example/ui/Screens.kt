@@ -11894,7 +11894,7 @@ fun TabMossadLevel() {
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
-                    text = "DÉBULLONAGE SCIENTIFIQUE : Le décodage corporel populaire (micro-expressions, regard fuyant) est scientifiquement faux (précision de 54%, identique au pur hasard). Le Mossad et les services secrets de pointe utilisent l'approche cognitive (S.E.T.S.), validée par la science (75% de réussite). Elle repose sur la saturation de la charge mentale.",
+                    text = "DÉBULLONAGE SCIENTIFIQUE : Le décodage corporel populaire (micro-expressions, regard fuyant) est scientifiquement faux (précision de 54%, identique au pur hasard). Le Mossad et les services secrets de pointe utilisent l'approche cognitive SUE (Strategic Use of Evidence), validée par la science (75% de réussite). Elle repose sur la saturation de la charge mentale.",
                     fontSize = 11.sp,
                     color = Anthracite,
                     lineHeight = 16.sp
@@ -11923,9 +11923,9 @@ fun TabMossadLevel() {
                 "🧠 Saturation mentale"
             ),
             Triple(
-                "3. L'Utilisation Stratégique des Preuves (S.E.T.S.)",
+                "3. L'Utilisation Stratégique des Preuves (SUE - Strategic Use of Evidence)",
                 "Si vous possédez une preuve (photo, bon de livraison erroné), NE la montrez JAMAIS au début. Laissez le suspect formuler des explications libres. Posez des questions larges, puis resserrez le piège. Lorsqu'il a menti de manière incontestable, abattez la preuve physique. La contradiction scelle sa culpabilité.",
-                "🧩 Méthode S.E.T.S."
+                "🧩 Méthode SUE (Strategic Use of Evidence)"
             )
         )
 
@@ -12072,7 +12072,7 @@ fun TabMossadLevel() {
                     }
                     3 -> {
                         Text(
-                            text = "PHASE 3 : Utilisation Stratégique des Preuves (S.E.T.S.)",
+                            text = "PHASE 3 : Utilisation Stratégique des Preuves (SUE - Strategic Use of Evidence)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = GoldClassic
