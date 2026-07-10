@@ -3,7 +3,7 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # Permet de lancer manuellement
+  workflow_dispatch:
 
 jobs:
   build:
@@ -22,14 +22,35 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
       
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Find and setup gradlew
+        run: |
+          # Cherche gradlew partout dans le repo
+          GRADLEW_PATH=$(find . -name "gradlew" -type f | head -n 1)
+          if [ -z "$GRADLEW_PATH" ]; then
+            echo "❌ gradlew not found!"
+            echo "Voici la structure du repo:"
+            find . -maxdepth 3 -type f | head -n 30
+            exit 1
+          fi
+          echo "✅ Found gradlew at: $GRADLEW_PATH"
+          chmod +x "$GRADLEW_PATH"
+          # Extrait le dossier parent
+          GRADLE_DIR=$(dirname "$GRADLEW_PATH")
+          echo "GRADLE_DIR=$GRADLE_DIR" >> $GITHUB_ENV
       
       - name: Build APK
-        run: ./gradlew assembleDebug  # ou assembleRelease
+        run: |
+          cd "$GRADLE_DIR"
+          ./gradlew assembleDebug
+      
+      - name: Find and upload APK
+        run: |
+          APK_PATH=$(find . -name "app-debug.apk" -o -name "*.apk" | head -n 1)
+          echo "APK found at: $APK_PATH"
+          echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.APK_PATH }}
