@@ -60,7 +60,8 @@ data class KegelLog(
     val done: Boolean = false,
     val morningDone: Boolean = false,
     val middayDone: Boolean = false,
-    val eveningDone: Boolean = false
+    val eveningDone: Boolean = false,
+    val reverseDone: Boolean = false
 )
 
 @Entity(tableName = "urge_surf_logs")
@@ -90,7 +91,50 @@ data class JournalEntry(
     val text: String,
     val stress: Int, // 1 to 10
     val tension: Int, // 1 to 10
-    val motivation: Int // 1 to 10
+    val motivation: Int, // 1 to 10
+    val performanceAnxiety: Int = 0 // échelle 1-10, indépendante du champ "stress" existant
+)
+
+@Entity(tableName = "pelvic_tension_checks")
+data class PelvicTensionCheck(
+    @PrimaryKey val weekStartDate: String, // "YYYY-MM-DD"
+    val tensionReported: Boolean
+)
+
+@Entity(tableName = "cardio_health_logs")
+data class CardioHealthLog(
+    @PrimaryKey val date: String, // "YYYY-MM-DD"
+    val systolicBP: Int? = null,
+    val diastolicBP: Int? = null,
+    val waistCircumferenceCm: Float? = null,
+    val alcoholUnits: Int = 0,
+    val tobaccoUsed: Boolean = false
+)
+
+@Entity(tableName = "morning_erection_logs")
+data class MorningErectionLog(
+    @PrimaryKey val date: String, // "YYYY-MM-DD"
+    val quality: String // "Oui", "Partielle", "Non"
+)
+
+@Entity(tableName = "rest_days")
+data class RestDay(
+    @PrimaryKey val date: String, // "YYYY-MM-DD"
+    val active: Boolean = true
+)
+
+@Entity(tableName = "daily_wins")
+data class DailyWin(
+    @PrimaryKey val date: String, // "YYYY-MM-DD"
+    val winText: String
+)
+
+@Entity(tableName = "gratitude_logs")
+data class GratitudeLog(
+    @PrimaryKey val date: String, // "YYYY-MM-DD"
+    val gratitude1: String = "",
+    val gratitude2: String = "",
+    val gratitude3: String = ""
 )
 
 @Entity(tableName = "sleep_logs")
@@ -363,6 +407,95 @@ interface SurvivalStockDao {
     suspend fun deleteAllSurvivalStockItems()
 }
 
+@Dao
+interface PelvicTensionCheckDao {
+    @Query("SELECT * FROM pelvic_tension_checks ORDER BY weekStartDate DESC")
+    fun getAllPelvicTensionChecksFlow(): Flow<List<PelvicTensionCheck>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPelvicTensionCheck(check: PelvicTensionCheck)
+
+    @Query("DELETE FROM pelvic_tension_checks")
+    suspend fun deleteAllPelvicTensionChecks()
+}
+
+@Dao
+interface CardioHealthLogDao {
+    @Query("SELECT * FROM cardio_health_logs ORDER BY date DESC")
+    fun getAllCardioHealthLogsFlow(): Flow<List<CardioHealthLog>>
+
+    @Query("SELECT * FROM cardio_health_logs WHERE date = :date LIMIT 1")
+    suspend fun getCardioHealthLogByDate(date: String): CardioHealthLog?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCardioHealthLog(log: CardioHealthLog)
+
+    @Query("DELETE FROM cardio_health_logs")
+    suspend fun deleteAllCardioHealthLogs()
+}
+
+@Dao
+interface MorningErectionLogDao {
+    @Query("SELECT * FROM morning_erection_logs ORDER BY date DESC")
+    fun getAllMorningErectionLogsFlow(): Flow<List<MorningErectionLog>>
+
+    @Query("SELECT * FROM morning_erection_logs WHERE date = :date LIMIT 1")
+    suspend fun getMorningErectionLogByDate(date: String): MorningErectionLog?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMorningErectionLog(log: MorningErectionLog)
+
+    @Query("DELETE FROM morning_erection_logs")
+    suspend fun deleteAllMorningErectionLogs()
+}
+
+@Dao
+interface RestDayDao {
+    @Query("SELECT * FROM rest_days ORDER BY date DESC")
+    fun getAllRestDaysFlow(): Flow<List<RestDay>>
+
+    @Query("SELECT * FROM rest_days WHERE date = :date LIMIT 1")
+    suspend fun getRestDayByDate(date: String): RestDay?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRestDay(restDay: RestDay)
+
+    @Query("DELETE FROM rest_days WHERE date = :date")
+    suspend fun deleteRestDayByDate(date: String)
+
+    @Query("DELETE FROM rest_days")
+    suspend fun deleteAllRestDays()
+}
+
+@Dao
+interface DailyWinDao {
+    @Query("SELECT * FROM daily_wins ORDER BY date DESC")
+    fun getAllDailyWinsFlow(): Flow<List<DailyWin>>
+
+    @Query("SELECT * FROM daily_wins WHERE date = :date LIMIT 1")
+    suspend fun getDailyWinByDate(date: String): DailyWin?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDailyWin(dailyWin: DailyWin)
+
+    @Query("DELETE FROM daily_wins")
+    suspend fun deleteAllDailyWins()
+}
+
+@Dao
+interface GratitudeLogDao {
+    @Query("SELECT * FROM gratitude_logs ORDER BY date DESC")
+    fun getAllGratitudeLogsFlow(): Flow<List<GratitudeLog>>
+
+    @Query("SELECT * FROM gratitude_logs WHERE date = :date LIMIT 1")
+    suspend fun getGratitudeLogByDate(date: String): GratitudeLog?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGratitudeLog(log: GratitudeLog)
+
+    @Query("DELETE FROM gratitude_logs")
+    suspend fun deleteAllGratitudeLogs()
+}
 
 
 // --- Room Database ---
@@ -382,9 +515,15 @@ interface SurvivalStockDao {
         CommunicationPracticeLog::class,
         SurvivalStockItem::class,
         UrgeSurfLog::class,
-        DelayTrainingLog::class
+        DelayTrainingLog::class,
+        PelvicTensionCheck::class,
+        CardioHealthLog::class,
+        MorningErectionLog::class,
+        RestDay::class,
+        DailyWin::class,
+        GratitudeLog::class
     ],
-    version = 10,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -402,6 +541,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun survivalStockDao(): SurvivalStockDao
     abstract fun urgeSurfLogDao(): UrgeSurfLogDao
     abstract fun delayTrainingLogDao(): DelayTrainingLogDao
+    abstract fun pelvicTensionCheckDao(): PelvicTensionCheckDao
+    abstract fun cardioHealthLogDao(): CardioHealthLogDao
+    abstract fun morningErectionLogDao(): MorningErectionLogDao
+    abstract fun restDayDao(): RestDayDao
+    abstract fun dailyWinDao(): DailyWinDao
+    abstract fun gratitudeLogDao(): GratitudeLogDao
 
     companion object {
         @Volatile

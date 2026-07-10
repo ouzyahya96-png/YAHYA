@@ -12,3 +12,10 @@ val LightBeige = Color(0xFFFAF7EE)
 val GoldPale = Color(0xFFFFFDF5)
 val LightGrayBg = Color(0xFFFAFAFA)
 
+// Palette Sunset — pour dégradés d'accent uniquement, jamais en fond plein écran
+val SunsetGoldLight = Color(0xFFF0C860)   // Point de départ clair du dégradé
+val SunsetAmber = Color(0xFFE8A33D)       // Milieu de dégradé
+val SunsetCopper = Color(0xFFC1666B)      // Point chaud/rosé, fin de dégradé (usage très ponctuel)
+val ShadowWarmTint = Color(0x1AD4AF37)    // Ombre teintée or à 10% d'opacité, remplace les ombres neutres grises
+
+

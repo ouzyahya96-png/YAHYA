@@ -16,6 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -304,6 +305,7 @@ data class NavigationItem(
 fun MainAppLayout(viewModel: OperationsViewModel) {
     var selectedPageIndex by remember { mutableIntStateOf(0) }
     var isSidebarOpen by remember { mutableStateOf(true) }
+    var showGlobalBreathing by remember { mutableStateOf(false) }
 
     val sidebarWidth by animateDpAsState(
         targetValue = if (isSidebarOpen) 190.dp else 64.dp,
@@ -313,13 +315,17 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
     val navItems = remember {
         listOf(
             NavigationItem("Dashboard", Icons.Filled.GridView, Icons.Outlined.GridView, 0),
+            NavigationItem("Pourquoi", Icons.Filled.Favorite, Icons.Outlined.Favorite, 11),
+            NavigationItem("Affirmations", Icons.Filled.SelfImprovement, Icons.Outlined.SelfImprovement, 12),
             NavigationItem("To-Do List", Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle, 1),
             NavigationItem("Calendrier", Icons.Filled.DateRange, Icons.Outlined.DateRange, 2),
             NavigationItem("Compléments", Icons.Filled.LocalPharmacy, Icons.Outlined.LocalPharmacy, 3),
             NavigationItem("GYM", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter, 4),
             NavigationItem("Récupération", Icons.Filled.FlashOn, Icons.Outlined.FlashOn, 5),
+            NavigationItem("Neurosciences", Icons.Filled.Psychology, Icons.Outlined.Psychology, 13),
             NavigationItem("Testostérone", Icons.Filled.WbSunny, Icons.Outlined.WbSunny, 6),
             NavigationItem("Communication", Icons.Filled.Forum, Icons.Outlined.Forum, 7),
+            NavigationItem("Leadership", Icons.Filled.Groups, Icons.Outlined.Groups, 14),
             NavigationItem("Sommeil", Icons.Filled.NightsStay, Icons.Outlined.NightsStay, 8),
             NavigationItem("Great Reset", Icons.Filled.Inventory2, Icons.Outlined.Inventory2, 9)
         )
@@ -329,118 +335,200 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
         NavigationItem("Paramètres", Icons.Filled.Settings, Icons.Outlined.Settings, 10)
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        // --- SIDEBAR NAVIGATION (LEFT) ---
-        Column(
-            modifier = Modifier
-                .width(sidebarWidth)
-                .fillMaxHeight()
-                .background(WhitePure)
-                .border(width = (0.5).dp, color = LightGrayDivider)
-        ) {
-            // Sidebar Header with Toggle button
-            Row(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            // --- SIDEBAR NAVIGATION (LEFT) ---
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 16.dp),
-                horizontalArrangement = if (isSidebarOpen) Arrangement.SpaceBetween else Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                    .width(sidebarWidth)
+                    .fillMaxHeight()
+                    .background(WhitePure)
+                    .border(width = (0.5).dp, color = LightGrayDivider)
             ) {
-                if (isSidebarOpen) {
-                    Text(
-                        text = "OPÉRATIONS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = GoldClassic,
-                        letterSpacing = 1.sp,
-                        modifier = Modifier.padding(start = 6.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = { isSidebarOpen = !isSidebarOpen },
-                    modifier = Modifier.size(28.dp).testTag("sidebar_toggle")
+                // Sidebar Header with Toggle button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 16.dp),
+                    horizontalArrangement = if (isSidebarOpen) Arrangement.SpaceBetween else Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (isSidebarOpen) Icons.Default.ChevronLeft else Icons.Default.Menu,
-                        contentDescription = "Toggle Sidebar",
-                        tint = GoldClassic,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    if (isSidebarOpen) {
+                        Text(
+                            text = "OPÉRATIONS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            letterSpacing = 1.sp,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { isSidebarOpen = !isSidebarOpen },
+                        modifier = Modifier.size(28.dp).testTag("sidebar_toggle")
+                    ) {
+                        Icon(
+                            imageVector = if (isSidebarOpen) Icons.Default.ChevronLeft else Icons.Default.Menu,
+                            contentDescription = "Toggle Sidebar",
+                            tint = GoldClassic,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Navigation menu items
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    navItems.forEach { item ->
+                        SidebarItem(
+                            item = item,
+                            isActive = selectedPageIndex == item.pageIndex,
+                            isSidebarOpen = isSidebarOpen,
+                            onClick = { 
+                                selectedPageIndex = item.pageIndex 
+                                isSidebarOpen = false
+                            }
+                        )
+                    }
+                }
+
+                // Push settings to the bottom
+                Spacer(modifier = Modifier.weight(1f))
+
+                Divider(color = LightGrayDivider, modifier = Modifier.padding(horizontal = 8.dp))
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                SidebarItem(
+                    item = settingsItem,
+                    isActive = selectedPageIndex == settingsItem.pageIndex,
+                    isSidebarOpen = isSidebarOpen,
+                    onClick = { 
+                        selectedPageIndex = settingsItem.pageIndex 
+                        isSidebarOpen = false
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Navigation menu items
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                navItems.forEach { item ->
-                    SidebarItem(
-                        item = item,
-                        isActive = selectedPageIndex == item.pageIndex,
-                        isSidebarOpen = isSidebarOpen,
-                        onClick = { 
-                            selectedPageIndex = item.pageIndex 
+            // --- MAIN SCREEN PANELS (RIGHT) ---
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(Color.White)
+            ) {
+                AnimatedContent(
+                    targetState = selectedPageIndex,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(220)) + slideInHorizontally(animationSpec = tween(220)) { width -> width / 20 }) togetherWith
+                        (fadeOut(animationSpec = tween(220)) + slideOutHorizontally(animationSpec = tween(220)) { width -> -width / 20 })
+                    },
+                    label = "PageTransition"
+                ) { targetIndex ->
+                    when (targetIndex) {
+                        0 -> DashboardPage(viewModel, onNavigateToPage = { 
+                            selectedPageIndex = it 
                             isSidebarOpen = false
-                        }
-                    )
+                        })
+                        11 -> PourquoiPage(viewModel)
+                        12 -> AffirmationsPage(viewModel)
+                        1 -> TodoListPage(viewModel)
+                        2 -> CalendrierPage(viewModel)
+                        3 -> ComplementsPage(viewModel)
+                        4 -> GymPage(viewModel)
+                        5 -> RecoveryPage(viewModel)
+                        13 -> NeurosciencePage(viewModel, onNavigateToPage = {
+                            selectedPageIndex = it
+                            isSidebarOpen = false
+                        })
+                        6 -> TestosteronePage(viewModel)
+                        7 -> CommunicationPage(viewModel)
+                        14 -> LeadershipPage(viewModel, onNavigateToPage = {
+                            selectedPageIndex = it
+                            isSidebarOpen = false
+                        })
+                        8 -> SommeilPage(viewModel)
+                        9 -> SurviveGreatResetPage(viewModel)
+                        10 -> SettingsPage(viewModel)
+                        else -> DashboardPage(viewModel, onNavigateToPage = { 
+                            selectedPageIndex = it 
+                            isSidebarOpen = false
+                        })
+                    }
                 }
             }
-
-            // Push settings to the bottom
-            Spacer(modifier = Modifier.weight(1f))
-
-            Divider(color = LightGrayDivider, modifier = Modifier.padding(horizontal = 8.dp))
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SidebarItem(
-                item = settingsItem,
-                isActive = selectedPageIndex == settingsItem.pageIndex,
-                isSidebarOpen = isSidebarOpen,
-                onClick = { 
-                    selectedPageIndex = settingsItem.pageIndex 
-                    isSidebarOpen = false
-                }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // --- MAIN SCREEN PANELS (RIGHT) ---
+        // --- GLOBAL FLOATING BUTTON FOR BREATHING ---
         Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(Color.White)
+                .align(Alignment.BottomEnd)
+                .padding(24.dp)
         ) {
-            AnimatedContent(
-                targetState = selectedPageIndex,
-                transitionSpec = {
-                    (fadeIn(animationSpec = tween(220)) + slideInHorizontally(animationSpec = tween(220)) { width -> width / 20 }) togetherWith
-                    (fadeOut(animationSpec = tween(220)) + slideOutHorizontally(animationSpec = tween(220)) { width -> -width / 20 })
-                },
-                label = "PageTransition"
-            ) { targetIndex ->
-                when (targetIndex) {
-                    0 -> DashboardPage(viewModel, onNavigateToPage = { 
-                        selectedPageIndex = it 
-                        isSidebarOpen = false
-                    })
-                    1 -> TodoListPage(viewModel)
-                    2 -> CalendrierPage(viewModel)
-                    3 -> ComplementsPage(viewModel)
-                    4 -> GymPage(viewModel)
-                    5 -> RecoveryPage(viewModel)
-                    6 -> TestosteronePage(viewModel)
-                    7 -> CommunicationPage(viewModel)
-                    8 -> SommeilPage(viewModel)
-                    9 -> SurviveGreatResetPage(viewModel)
-                    10 -> SettingsPage(viewModel)
-                    else -> DashboardPage(viewModel, onNavigateToPage = { 
-                        selectedPageIndex = it 
-                        isSidebarOpen = false
-                    })
+            FloatingActionButton(
+                onClick = { showGlobalBreathing = true },
+                containerColor = Color.White,
+                contentColor = GoldClassic,
+                shape = CircleShape,
+                modifier = Modifier
+                    .size(56.dp)
+                    .border(2.dp, GradientTokens.sunsetHorizontal, CircleShape)
+                    .testTag("global_respiration_fab")
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SelfImprovement,
+                    contentDescription = "Respiration Parfaite",
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+        }
+
+        // --- GLOBAL DIALOG OVERLAY ---
+        if (showGlobalBreathing) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = { showGlobalBreathing = false }) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Respiration Parfaite 🌬️",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                            IconButton(
+                                onClick = { showGlobalBreathing = false },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Fermer",
+                                    tint = MediumGray,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        
+                        GlobalRespirationController(viewModel = viewModel, onDismiss = { showGlobalBreathing = false })
+                    }
                 }
             }
         }
@@ -493,9 +581,9 @@ fun SidebarItem(
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .width(3.5.dp)
+                    .width(4.5.dp)
                     .fillMaxHeight()
-                    .background(GoldClassic)
+                    .background(GradientTokens.sunsetVertical)
             )
         }
     }

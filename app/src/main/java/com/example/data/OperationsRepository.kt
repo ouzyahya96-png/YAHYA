@@ -18,6 +18,12 @@ class OperationsRepository(private val db: AppDatabase) {
     val survivalStockItemsFlow: Flow<List<SurvivalStockItem>> = db.survivalStockDao().getAllSurvivalStockItemsFlow()
     val urgeSurfLogsFlow: Flow<List<UrgeSurfLog>> = db.urgeSurfLogDao().getAllUrgeSurfLogsFlow()
     val delayTrainingLogsFlow: Flow<List<DelayTrainingLog>> = db.delayTrainingLogDao().getAllDelayTrainingLogsFlow()
+    val pelvicTensionChecksFlow: Flow<List<PelvicTensionCheck>> = db.pelvicTensionCheckDao().getAllPelvicTensionChecksFlow()
+    val cardioHealthLogsFlow: Flow<List<CardioHealthLog>> = db.cardioHealthLogDao().getAllCardioHealthLogsFlow()
+    val morningErectionLogsFlow: Flow<List<MorningErectionLog>> = db.morningErectionLogDao().getAllMorningErectionLogsFlow()
+    val restDaysFlow: Flow<List<RestDay>> = db.restDayDao().getAllRestDaysFlow()
+    val dailyWinsFlow: Flow<List<DailyWin>> = db.dailyWinDao().getAllDailyWinsFlow()
+    val gratitudeLogsFlow: Flow<List<GratitudeLog>> = db.gratitudeLogDao().getAllGratitudeLogsFlow()
 
     fun getExercisesForSessionFlow(sessionId: Long): Flow<List<GymExercise>> = db.gymExerciseDao().getExercisesForSessionFlow(sessionId)
     suspend fun getExercisesForSession(sessionId: Long): List<GymExercise> = db.gymExerciseDao().getExercisesForSession(sessionId)
@@ -77,6 +83,30 @@ class OperationsRepository(private val db: AppDatabase) {
     suspend fun getDelayTrainingLogByDate(date: String): DelayTrainingLog? = db.delayTrainingLogDao().getDelayTrainingLogByDate(date)
     suspend fun insertDelayTrainingLog(log: DelayTrainingLog) = db.delayTrainingLogDao().insertDelayTrainingLog(log)
 
+    // Pelvic Tension Checks
+    suspend fun insertPelvicTensionCheck(check: PelvicTensionCheck) = db.pelvicTensionCheckDao().insertPelvicTensionCheck(check)
+
+    // Cardio Health Logs
+    suspend fun getCardioHealthLogByDate(date: String): CardioHealthLog? = db.cardioHealthLogDao().getCardioHealthLogByDate(date)
+    suspend fun insertCardioHealthLog(log: CardioHealthLog) = db.cardioHealthLogDao().insertCardioHealthLog(log)
+
+    // Morning Erection Logs
+    suspend fun getMorningErectionLogByDate(date: String): MorningErectionLog? = db.morningErectionLogDao().getMorningErectionLogByDate(date)
+    suspend fun insertMorningErectionLog(log: MorningErectionLog) = db.morningErectionLogDao().insertMorningErectionLog(log)
+
+    // Rest Days
+    suspend fun getRestDayByDate(date: String): RestDay? = db.restDayDao().getRestDayByDate(date)
+    suspend fun insertRestDay(restDay: RestDay) = db.restDayDao().insertRestDay(restDay)
+    suspend fun deleteRestDayByDate(date: String) = db.restDayDao().deleteRestDayByDate(date)
+
+    // Daily Wins
+    suspend fun getDailyWinByDate(date: String): DailyWin? = db.dailyWinDao().getDailyWinByDate(date)
+    suspend fun insertDailyWin(dailyWin: DailyWin) = db.dailyWinDao().insertDailyWin(dailyWin)
+
+    // Gratitude Logs
+    suspend fun getGratitudeLogByDate(date: String): GratitudeLog? = db.gratitudeLogDao().getGratitudeLogByDate(date)
+    suspend fun insertGratitudeLog(log: GratitudeLog) = db.gratitudeLogDao().insertGratitudeLog(log)
+
     // Clear all data (Full Reset)
     suspend fun clearAllData() {
         db.taskDao().deleteAllTasks()
@@ -93,5 +123,11 @@ class OperationsRepository(private val db: AppDatabase) {
         db.survivalStockDao().deleteAllSurvivalStockItems()
         db.urgeSurfLogDao().deleteAllUrgeSurfLogs()
         db.delayTrainingLogDao().deleteAllDelayTrainingLogs()
+        db.pelvicTensionCheckDao().deleteAllPelvicTensionChecks()
+        db.cardioHealthLogDao().deleteAllCardioHealthLogs()
+        db.morningErectionLogDao().deleteAllMorningErectionLogs()
+        db.restDayDao().deleteAllRestDays()
+        db.dailyWinDao().deleteAllDailyWins()
+        db.gratitudeLogDao().deleteAllGratitudeLogs()
     }
 }

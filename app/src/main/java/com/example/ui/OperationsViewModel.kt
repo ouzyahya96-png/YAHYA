@@ -69,7 +69,27 @@ class OperationsViewModel(
     val delayTrainingLogs: StateFlow<List<DelayTrainingLog>> = repository.delayTrainingLogsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val pelvicTensionChecks: StateFlow<List<PelvicTensionCheck>> = repository.pelvicTensionChecksFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val cardioHealthLogs: StateFlow<List<CardioHealthLog>> = repository.cardioHealthLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val morningErectionLogs: StateFlow<List<MorningErectionLog>> = repository.morningErectionLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val restDays: StateFlow<List<RestDay>> = repository.restDaysFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val dailyWins: StateFlow<List<DailyWin>> = repository.dailyWinsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val gratitudeLogs: StateFlow<List<GratitudeLog>> = repository.gratitudeLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- Settings / Preferences State ---
+    private val _whyStatement = MutableStateFlow(sharedPrefs.getString("why_statement", "") ?: "")
+    val whyStatement: StateFlow<String> = _whyStatement.asStateFlow()
     private val _householdSize = MutableStateFlow(sharedPrefs.getInt("household_size", 10))
     val householdSize: StateFlow<Int> = _householdSize.asStateFlow()
 
@@ -100,6 +120,12 @@ class OperationsViewModel(
 
     private val _analysisError = MutableStateFlow<String?>(null)
     val analysisError: StateFlow<String?> = _analysisError.asStateFlow()
+
+    private val _geminiAnalysisDate = MutableStateFlow<String>(sharedPrefs.getString("gemini_analysis_date", "") ?: "")
+    val geminiAnalysisDate: StateFlow<String> = _geminiAnalysisDate.asStateFlow()
+
+    private val _isAnalysisOffline = MutableStateFlow<Boolean>(false)
+    val isAnalysisOffline: StateFlow<Boolean> = _isAnalysisOffline.asStateFlow()
 
     // Daily affirmation state
     private val _dailyAffirmation = MutableStateFlow<String>("")
@@ -160,6 +186,14 @@ class OperationsViewModel(
     val breathingIsRunning = _breathingIsRunning.asStateFlow()
 
     private var breathingJob: Job? = null
+
+    // Active tab for RecoveryPage (hoisted to viewmodel for deep linking/navigation)
+    private val _recoveryActiveTab = MutableStateFlow("Streak")
+    val recoveryActiveTab = _recoveryActiveTab.asStateFlow()
+
+    fun setRecoveryActiveTab(tab: String) {
+        _recoveryActiveTab.value = tab
+    }
 
     init {
         // Initialize streak start date if empty
@@ -222,7 +256,9 @@ class OperationsViewModel(
         if (startStr.isNullOrEmpty()) return 1
         val todayStr = getTodayDate()
         val days = calculateDaysBetween(startStr, todayStr)
-        return days + 1
+        val activeRestDaysCount = restDays.value.count { it.date >= startStr && it.date <= todayStr && it.active }
+        val finalStreak = (days - activeRestDaysCount) + 1
+        return if (finalStreak < 1) 1 else finalStreak
     }
 
     private fun calculateDaysBetween(startDateStr: String, endDateStr: String): Int {
@@ -409,10 +445,10 @@ class OperationsViewModel(
     fun calculateConsecutiveDaysTaken(supplementKey: String, logsList: List<SupplementLog> = supplementLogs.value): Int {
         val logs = logsList.associateBy { it.date }
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val restSet = restDays.value.filter { it.active }.map { it.date }.toSet()
         
         var count = 0
-        val cal = Calendar.getInstance()
-        val todayStr = sdf.format(cal.time)
+        val startCal = Calendar.getInstance()
         
         fun isTaken(dateStr: String): Boolean {
             val log = logs[dateStr] ?: return false
@@ -431,19 +467,39 @@ class OperationsViewModel(
             }
         }
         
-        val startCal = Calendar.getInstance()
-        val todayTaken = isTaken(todayStr)
-        
-        if (!todayTaken) {
-            startCal.add(Calendar.DAY_OF_YEAR, -1)
-            val yesterdayStr = sdf.format(startCal.time)
-            if (!isTaken(yesterdayStr)) {
-                return 0
+        var checkCal = Calendar.getInstance()
+        var daysChecked = 0
+        while (daysChecked < 365) {
+            val dateStr = sdf.format(checkCal.time)
+            if (dateStr in restSet) {
+                checkCal.add(Calendar.DAY_OF_YEAR, -1)
+                daysChecked++
+                continue
+            }
+            if (isTaken(dateStr)) {
+                startCal.time = checkCal.time
+                break
+            } else {
+                checkCal.add(Calendar.DAY_OF_YEAR, -1)
+                val prevDateStr = sdf.format(checkCal.time)
+                if (prevDateStr in restSet) {
+                    checkCal.add(Calendar.DAY_OF_YEAR, -1)
+                    continue
+                }
+                if (!isTaken(prevDateStr)) {
+                    return 0
+                }
+                startCal.time = checkCal.time
+                break
             }
         }
         
         while (true) {
             val dateStr = sdf.format(startCal.time)
+            if (dateStr in restSet) {
+                startCal.add(Calendar.DAY_OF_YEAR, -1)
+                continue
+            }
             if (isTaken(dateStr)) {
                 count++
                 startCal.add(Calendar.DAY_OF_YEAR, -1)
@@ -607,22 +663,22 @@ class OperationsViewModel(
             val updatedLog = when (phase.sessionsPerDay) {
                 3 -> {
                     if (!currentLog.morningDone) {
-                        currentLog.copy(morningDone = true, done = true)
+                        currentLog.copy(morningDone = true, done = true && currentLog.reverseDone)
                     } else if (!currentLog.middayDone) {
-                        currentLog.copy(middayDone = true, done = true)
+                        currentLog.copy(middayDone = true, done = (currentLog.morningDone || true || currentLog.eveningDone) && currentLog.reverseDone)
                     } else {
-                        currentLog.copy(eveningDone = true, done = true)
+                        currentLog.copy(eveningDone = true, done = (currentLog.morningDone || currentLog.middayDone || true) && currentLog.reverseDone)
                     }
                 }
                 2 -> {
                     if (!currentLog.morningDone) {
-                        currentLog.copy(morningDone = true, done = true)
+                        currentLog.copy(morningDone = true, done = true && currentLog.reverseDone)
                     } else {
-                        currentLog.copy(eveningDone = true, done = true)
+                        currentLog.copy(eveningDone = true, done = (currentLog.morningDone || true) && currentLog.reverseDone)
                     }
                 }
                 else -> {
-                    currentLog.copy(done = true, morningDone = true)
+                    currentLog.copy(done = true && currentLog.reverseDone, morningDone = true)
                 }
             }
             repository.insertKegelLog(updatedLog)
@@ -631,7 +687,7 @@ class OperationsViewModel(
                 NotificationHelper.triggerNotification(
                     application,
                     "Exercice Kegel Terminé",
-                    "Votre routine Kegel quotidienne est validée !",
+                    "Votre routine Kegel classique du jour est validée ! N'oubliez pas le relâchement pelvien ce soir.",
                     playSound = _soundEnabled.value
                 )
             }
@@ -657,26 +713,55 @@ class OperationsViewModel(
     fun toggleKegelLogSession(date: String, sessionType: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val currentLog = repository.getKegelLogByDate(date) ?: KegelLog(date = date)
+            val startDate = getKegelProgramStartDateOrDefault()
+            val (phase, _) = KegelProgramCalculator.getCurrentPhase(startDate)
             val updatedLog = when (sessionType) {
                 "morning" -> {
                     val newMorning = !currentLog.morningDone
+                    val classicDone = when (phase.sessionsPerDay) {
+                        3 -> newMorning || currentLog.middayDone || currentLog.eveningDone
+                        2 -> newMorning || currentLog.eveningDone
+                        else -> true
+                    }
                     currentLog.copy(
                         morningDone = newMorning,
-                        done = newMorning || currentLog.middayDone || currentLog.eveningDone
+                        done = classicDone && currentLog.reverseDone
                     )
                 }
                 "midday" -> {
                     val newMidday = !currentLog.middayDone
+                    val classicDone = when (phase.sessionsPerDay) {
+                        3 -> currentLog.morningDone || newMidday || currentLog.eveningDone
+                        2 -> true
+                        else -> true
+                    }
                     currentLog.copy(
                         middayDone = newMidday,
-                        done = currentLog.morningDone || newMidday || currentLog.eveningDone
+                        done = classicDone && currentLog.reverseDone
                     )
                 }
                 "evening" -> {
                     val newEvening = !currentLog.eveningDone
+                    val classicDone = when (phase.sessionsPerDay) {
+                        3 -> currentLog.morningDone || currentLog.middayDone || newEvening
+                        2 -> currentLog.morningDone || newEvening
+                        else -> true
+                    }
                     currentLog.copy(
                         eveningDone = newEvening,
-                        done = currentLog.morningDone || currentLog.middayDone || newEvening
+                        done = classicDone && currentLog.reverseDone
+                    )
+                }
+                "reverse" -> {
+                    val newReverse = !currentLog.reverseDone
+                    val classicDone = when (phase.sessionsPerDay) {
+                        3 -> currentLog.morningDone || currentLog.middayDone || currentLog.eveningDone
+                        2 -> currentLog.morningDone || currentLog.eveningDone
+                        else -> currentLog.morningDone || currentLog.done
+                    }
+                    currentLog.copy(
+                        reverseDone = newReverse,
+                        done = classicDone && newReverse
                     )
                 }
                 else -> {
@@ -685,7 +770,8 @@ class OperationsViewModel(
                         done = newDone,
                         morningDone = newDone,
                         middayDone = false,
-                        eveningDone = false
+                        eveningDone = false,
+                        reverseDone = newDone
                     )
                 }
             }
@@ -735,17 +821,25 @@ class OperationsViewModel(
                     _breathingTotalSecondsElapsed.value += 1
                 }
 
-                // Hold phase: 4s
-                _breathingState.value = "HOLD"
-                for (s in 4 downTo 1) {
+                // Hold high phase (poumons pleins): 2s
+                _breathingState.value = "HOLD_HIGH"
+                for (s in 2 downTo 1) {
                     _breathingSecondsLeft.value = s
                     delay(1000)
                     _breathingTotalSecondsElapsed.value += 1
                 }
 
-                // Exhale phase: 6s
+                // Exhale phase: 7s
                 _breathingState.value = "OUT"
-                for (s in 6 downTo 1) {
+                for (s in 7 downTo 1) {
+                    _breathingSecondsLeft.value = s
+                    delay(1000)
+                    _breathingTotalSecondsElapsed.value += 1
+                }
+
+                // Hold low phase (poumons vides): 2s
+                _breathingState.value = "HOLD_LOW"
+                for (s in 2 downTo 1) {
                     _breathingSecondsLeft.value = s
                     delay(1000)
                     _breathingTotalSecondsElapsed.value += 1
@@ -780,7 +874,7 @@ class OperationsViewModel(
     }
 
     // --- Journal Entry ---
-    fun saveJournalEntry(text: String, stress: Int, tension: Int, motivation: Int) {
+    fun saveJournalEntry(text: String, stress: Int, tension: Int, motivation: Int, performanceAnxiety: Int = 0) {
         val today = getTodayDate()
         viewModelScope.launch(Dispatchers.IO) {
             val entry = JournalEntry(
@@ -788,9 +882,78 @@ class OperationsViewModel(
                 text = text,
                 stress = stress,
                 tension = tension,
-                motivation = motivation
+                motivation = motivation,
+                performanceAnxiety = performanceAnxiety
             )
             repository.insertJournalEntry(entry)
+        }
+    }
+
+    // --- Rest Days ---
+    fun toggleRestDay(date: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = repository.getRestDayByDate(date)
+            if (existing != null) {
+                repository.insertRestDay(RestDay(date = date, active = !existing.active))
+            } else {
+                repository.insertRestDay(RestDay(date = date, active = true))
+            }
+        }
+    }
+
+    // --- Daily Wins ---
+    fun saveDailyWin(date: String, winText: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.insertDailyWin(DailyWin(date = date, winText = winText))
+        }
+    }
+
+    // --- Gratitude Logs ---
+    fun saveGratitude(date: String, g1: String, g2: String, g3: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.insertGratitudeLog(GratitudeLog(date = date, gratitude1 = g1, gratitude2 = g2, gratitude3 = g3))
+        }
+    }
+
+    // --- Why Statement ---
+    fun saveWhyStatement(text: String) {
+        sharedPrefs.edit().putString("why_statement", text).apply()
+        _whyStatement.value = text
+    }
+
+    // --- Pelvic Tension Checks ---
+    fun savePelvicTensionCheck(weekStartDate: String, tensionReported: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.insertPelvicTensionCheck(PelvicTensionCheck(weekStartDate, tensionReported))
+        }
+    }
+
+    // --- Cardio Health Logs ---
+    fun saveCardioHealthLog(
+        date: String,
+        systolic: Int?,
+        diastolic: Int?,
+        waist: Float?,
+        alcohol: Int,
+        tobacco: Boolean
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val log = CardioHealthLog(
+                date = date,
+                systolicBP = systolic,
+                diastolicBP = diastolic,
+                waistCircumferenceCm = waist,
+                alcoholUnits = alcohol,
+                tobaccoUsed = tobacco
+            )
+            repository.insertCardioHealthLog(log)
+        }
+    }
+
+    // --- Morning Erection Logs ---
+    fun saveMorningErectionLog(date: String, quality: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.insertMorningErectionLog(MorningErectionLog(date, quality))
         }
     }
 
@@ -963,6 +1126,18 @@ class OperationsViewModel(
             val avgStress = if (recentJournal.isNotEmpty()) recentJournal.map { it.stress }.average().toInt() else 5
             val avgTension = if (recentJournal.isNotEmpty()) recentJournal.map { it.tension }.average().toInt() else 5
             val avgMotivation = if (recentJournal.isNotEmpty()) recentJournal.map { it.motivation }.average().toInt() else 5
+            val avgPerfAnxiety = if (recentJournal.isNotEmpty()) recentJournal.map { it.performanceAnxiety }.average().toInt() else 0
+
+            val recentCardio = cardioHealthLogs.value.take(7)
+            val avgSystolic = if (recentCardio.any { it.systolicBP != null }) recentCardio.mapNotNull { it.systolicBP }.average().toInt() else null
+            val avgDiastolic = if (recentCardio.any { it.diastolicBP != null }) recentCardio.mapNotNull { it.diastolicBP }.average().toInt() else null
+            val avgAlcohol = if (recentCardio.isNotEmpty()) recentCardio.map { it.alcoholUnits }.average() else 0.0
+            val smokeFreeDays = 7 - recentCardio.count { it.tobaccoUsed }
+
+            val recentErections = morningErectionLogs.value.take(7)
+            val erectionsYes = recentErections.count { it.quality == "Oui" }
+            val erectionsPartial = recentErections.count { it.quality == "Partielle" }
+            val erectionsNo = recentErections.count { it.quality == "Non" }
 
             val recentTasks = tasks.value
             val tasksCompleted = recentTasks.filter { it.done }.size
@@ -978,7 +1153,9 @@ class OperationsViewModel(
             - Récupération (Streak sans rechute) : Jour $currentStreak sur 180
             - Exercices Kegel effectués : $kegelCount fois
             - Sessions de Respiration : $breathingCount sessions
-            - Journal - Stress moyen : $avgStress/10, Tension moyenne : $avgTension/10, Motivation moyenne : $avgMotivation/10
+            - Journal - Stress moyen : $avgStress/10, Tension moyenne : $avgTension/10, Motivation moyenne : $avgMotivation/10, Anxiété de performance sexuelle moyenne : $avgPerfAnxiety/10
+            - Santé Cardiovasculaire : Tension moyenne : ${if (avgSystolic != null && avgDiastolic != null) "$avgSystolic/$avgDiastolic" else "Non mesurée"}, Alcool moyen : ${String.format("%.1f", avgAlcohol)} unités/jour, Jours sans tabac : $smokeFreeDays/7
+            - Érections matinales (sur les 7 derniers jours) : $erectionsYes Oui, $erectionsPartial Partielles, $erectionsNo Non
             - Tâches accomplies : $tasksCompleted/$tasksTotal tâches de la semaine
             
             Veuillez générer exactement :
@@ -1000,14 +1177,34 @@ class OperationsViewModel(
                 }
                 val textResponse = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 if (!textResponse.isNullOrEmpty()) {
+                    val sdf = java.text.SimpleDateFormat("dd/MM/yyyy 'à' HH:mm", java.util.Locale.getDefault())
+                    val currentDateStr = sdf.format(java.util.Date())
                     _geminiAnalysis.value = textResponse
-                    sharedPrefs.edit().putString("gemini_analysis", textResponse).apply()
+                    _geminiAnalysisDate.value = currentDateStr
+                    _isAnalysisOffline.value = false
+                    _analysisError.value = null
+                    sharedPrefs.edit()
+                        .putString("gemini_analysis", textResponse)
+                        .putString("gemini_analysis_date", currentDateStr)
+                        .apply()
                 } else {
                     _analysisError.value = "Réponse vide de Gemini."
                 }
             } catch (e: Exception) {
                 Log.e("OperationsViewModel", "Gemini call failed", e)
-                _analysisError.value = "Échec de l'analyse: ${e.message}"
+                val cached = sharedPrefs.getString("gemini_analysis", null)
+                val cachedDate = sharedPrefs.getString("gemini_analysis_date", "") ?: ""
+                if (!cached.isNullOrEmpty()) {
+                    _geminiAnalysis.value = cached
+                    _geminiAnalysisDate.value = cachedDate
+                    _isAnalysisOffline.value = true
+                    _analysisError.value = null
+                } else {
+                    _geminiAnalysis.value = ""
+                    _geminiAnalysisDate.value = ""
+                    _isAnalysisOffline.value = false
+                    _analysisError.value = "OFFLINE_NO_CACHE"
+                }
             } finally {
                 _isLoadingAnalysis.value = false
             }

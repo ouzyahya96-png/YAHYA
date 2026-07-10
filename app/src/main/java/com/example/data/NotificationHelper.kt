@@ -28,7 +28,23 @@ object NotificationHelper {
         isChannelCreated = true
     }
 
+    private fun isRestDayToday(context: Context): Boolean {
+        return try {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            val todayStr = sdf.format(java.util.Date())
+            kotlinx.coroutines.runBlocking {
+                AppDatabase.getDatabase(context).restDayDao().getRestDayByDate(todayStr)?.active == true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun triggerNotification(context: Context, title: String, message: String, playSound: Boolean = true) {
+        if (isRestDayToday(context)) {
+            Log.d("NotificationHelper", "Bypassing notification because today is a Rest Day")
+            return
+        }
         try {
             createNotificationChannel(context)
 
@@ -55,6 +71,10 @@ object NotificationHelper {
     }
 
     fun queueOrSendNotification(context: Context, title: String, message: String, timeSlot: String) {
+        if (isRestDayToday(context)) {
+            Log.d("NotificationHelper", "Bypassing queueOrSendNotification because today is a Rest Day")
+            return
+        }
         val sharedPrefs = context.getSharedPreferences("directeur_ops_settings", Context.MODE_PRIVATE)
         val notificationsEnabled = sharedPrefs.getBoolean("notifications_enabled", true)
         val digestEnabled = sharedPrefs.getBoolean("digest_mode_enabled", false)

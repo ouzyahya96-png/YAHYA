@@ -14,8 +14,12 @@ class AffirmationReceiver : BroadcastReceiver() {
         val soundEnabled = sharedPrefs.getBoolean("sound_enabled", true)
 
         if (notificationsEnabled) {
-            val affirmation = AffirmationsData.getRandomAffirmation()
             val hour = intent.getIntExtra("hour", 9)
+            val affirmation = if (hour == 9) {
+                AffirmationsData.getCombinedAffirmations(3)
+            } else {
+                AffirmationsData.getRandomAffirmation()
+            }
             val timeSlot = when (hour) {
                 9 -> "matin"
                 15 -> "apres-midi"

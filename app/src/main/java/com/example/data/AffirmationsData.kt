@@ -33,11 +33,41 @@ object AffirmationsData {
         "Je reste imperturbable face aux distractions de ce monde.",
         "Mon potentiel est illimité, guidé par une discipline inébranlable.",
         "Je choisis de vivre consciemment et de progresser constamment.",
-        "Je suis déterminé, fort et pleinement engagé envers ma réussite."
+        "Je suis déterminé, fort et pleinement engagé envers ma réussite.",
+        "Je suis exceptionnel et je le sais.",
+        "Je vais accomplir de grandes choses.",
+        "Je vis à un niveau de conscience supérieur.",
+        "J'attire le meilleur dans ma vie.",
+        "Mon énergie est protégée et précieuse.",
+        "Je mérite le succès que je construis chaque jour.",
+        "Ma discipline façonne mon avenir.",
+        "Je suis en paix avec qui je deviens.",
+        "Chaque seconde de mon temps est un investissement précieux.",
+        "Ma vision est claire, mon engagement est inébranlable.",
+        "Je refuse d'abaisser mes standards pour plaire ou m'intégrer.",
+        "Je possède le courage d'agir malgré les doutes.",
+        "Mon potentiel se libère à mesure que je renforce ma volonté.",
+        "Je choisis la maîtrise de moi-même plutôt que la distraction facile.",
+        "Ma force réside dans ma capacité à rester focus sous la pression.",
+        "La réussite n'est pas un hasard, c'est mon habitude quotidienne.",
+        "Je suis fier de l'homme intègre et puissant que je construis.",
+        "Je purifie mon esprit de toute influence négative.",
+        "Je suis le créateur de ma réalité et de ma force.",
+        "Ma présence inspire la force, le calme et la discipline.",
+        "Je protège ma paix intérieure comme mon bien le plus précieux.",
+        "Chaque effort fourni aujourd'hui portera ses fruits demain.",
+        "Je suis aligné avec mes valeurs les plus hautes.",
+        "Je n'accepte que l'excellence dans mes pensées et mes actes.",
+        "Je m'élève au-dessus du bruit et de la médiocrité.",
+        "Mon esprit est une forteresse imprenable d'ambition et de paix."
     )
 
     fun getRandomAffirmation(): String {
         val index = Random.nextInt(affirmations.size)
         return affirmations[index]
+    }
+
+    fun getCombinedAffirmations(count: Int): String {
+        return affirmations.shuffled().take(count).joinToString(" ")
     }
 }

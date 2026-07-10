@@ -28,14 +28,17 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -97,15 +100,21 @@ fun GoldGradientButton(
 fun OperationsCard(
     modifier: Modifier = Modifier,
     borderAccent: Boolean = false,
+    borderBrush: Brush? = null,
+    borderWidth: androidx.compose.ui.unit.Dp = 1.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = WhitePure),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(
-            width = if (borderAccent) 1.5.dp else 1.dp,
-            color = if (borderAccent) GoldClassic else LightGrayDivider
-        ),
+        border = if (borderBrush != null) {
+            BorderStroke(borderWidth, borderBrush)
+        } else {
+            BorderStroke(
+                width = if (borderAccent) 1.5.dp else 1.dp,
+                color = if (borderAccent) GoldClassic else LightGrayDivider
+            )
+        },
         modifier = modifier.fillMaxWidth(),
         content = content
     )
@@ -157,12 +166,24 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
     val sleepLogs by viewModel.sleepLogs.collectAsState()
     val dailyAffirmation by viewModel.dailyAffirmation.collectAsState()
 
+    val restDays by viewModel.restDays.collectAsState()
+    val dailyWins by viewModel.dailyWins.collectAsState()
+    val whyStatement by viewModel.whyStatement.collectAsState()
+
     val geminiAnalysis by viewModel.geminiAnalysis.collectAsState()
+    val geminiAnalysisDate by viewModel.geminiAnalysisDate.collectAsState()
+    val isAnalysisOffline by viewModel.isAnalysisOffline.collectAsState()
     val isLoadingAnalysis by viewModel.isLoadingAnalysis.collectAsState()
     val analysisError by viewModel.analysisError.collectAsState()
     val hasApiKey = viewModel.geminiApiKey.collectAsState().value.isNotEmpty()
 
     val todayStr = viewModel.getTodayDate()
+    val isRestDayActive = restDays.any { it.date == todayStr && it.active }
+
+    val randomWin = remember(dailyWins) {
+        val recentWins = dailyWins.sortedByDescending { it.date }.take(10)
+        if (recentWins.isNotEmpty()) recentWins.random() else null
+    }
 
     val remainingTasks = tasks.filter { it.date == todayStr && !it.done }
     val nextTask = remainingTasks.firstOrNull()
@@ -182,10 +203,89 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
     ) {
         item {
             val formattedDate = SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(Date())
-            PageHeader(
-                title = "Aujourd'hui",
-                subtitle = formattedDate
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PageHeader(
+                    title = "Aujourd'hui",
+                    subtitle = formattedDate
+                )
+                
+                TextButton(
+                    onClick = { onNavigateToPage(11) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = GoldClassic)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Pourquoi",
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Mon Pourquoi", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // --- MODE JOUR DE PAUSE TOGGLE & BANNER ---
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.NightsStay,
+                        contentDescription = "Rest Day",
+                        tint = if (isRestDayActive) GoldClassic else MediumGray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Aujourd'hui je souffle 🕊️",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Anthracite
+                    )
+                }
+                Switch(
+                    checked = isRestDayActive,
+                    onCheckedChange = { viewModel.toggleRestDay(todayStr) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = GoldClassic,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color.LightGray
+                    ),
+                    modifier = Modifier.testTag("rest_day_switch")
+                )
+            }
+        }
+
+        if (isRestDayActive) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightBeige, RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "Jour de pause activé — repose-toi, tout reprend normalement demain.",
+                        fontSize = 12.sp,
+                        color = GoldClassic,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
 
         // --- ENCART AFFIRMATION DU JOUR ---
@@ -227,6 +327,36 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 8.dp)
                     )
+                }
+            }
+        }
+
+        // --- ENCART VICTOIRE ALÉATOIRE ---
+        if (randomWin != null) {
+            item {
+                OperationsCard(borderAccent = false) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Victoire Récente 🏆",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        Text(
+                            text = "« ${randomWin.winText} »",
+                            fontSize = 13.sp,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            color = Anthracite,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+                    }
                 }
             }
         }
@@ -290,19 +420,60 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                             SkeletonLoader(height = 14.dp)
                             SkeletonLoader(height = 14.dp)
                         }
+                    } else if (analysisError == "OFFLINE_NO_CACHE") {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WifiOff,
+                                contentDescription = "Offline",
+                                tint = MediumGray.copy(alpha = 0.5f),
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Text(
+                                text = "Connecte-toi à internet pour recevoir ta première analyse personnalisée.",
+                                fontSize = 13.sp,
+                                color = MediumGray,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     } else if (!analysisError.isNullOrEmpty()) {
                         Text(
-                            text = analysisError ?: "",
+                            text = "Un problème est survenu lors de l'analyse quotidienne. Veuillez réessayer plus tard.",
                             fontSize = 13.sp,
                             color = Color(0xFFC62828)
                         )
                     } else if (geminiAnalysis.isNotEmpty()) {
-                        Text(
-                            text = geminiAnalysis,
-                            fontSize = 14.sp,
-                            color = Anthracite,
-                            lineHeight = 20.sp
-                        )
+                        Column {
+                            if (isAnalysisOffline) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.WifiOff,
+                                        contentDescription = "Offline",
+                                        tint = MediumGray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Hors ligne — dernière analyse du $geminiAnalysisDate",
+                                        fontSize = 11.sp,
+                                        color = MediumGray,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                            Text(
+                                text = geminiAnalysis,
+                                fontSize = 14.sp,
+                                color = Anthracite,
+                                lineHeight = 20.sp
+                            )
+                        }
                     } else {
                         Text(
                             text = "Aucune analyse générée aujourd'hui. Cliquez sur le bouton de rafraîchissement pour lancer l'analyse croisée de vos données.",
@@ -324,7 +495,8 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                 // Card 1: Recovery Streak
                 OperationsCard(
                     modifier = Modifier.weight(1f),
-                    borderAccent = true
+                    borderBrush = GradientTokens.sunsetHorizontal,
+                    borderWidth = 2.dp
                 ) {
                     Column(
                         modifier = Modifier
@@ -359,7 +531,8 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                 // Card 2: Last Night's Sleep
                 OperationsCard(
                     modifier = Modifier.weight(1f),
-                    borderAccent = true
+                    borderBrush = GradientTokens.sunsetHorizontal,
+                    borderWidth = 2.dp
                 ) {
                     Column(
                         modifier = Modifier
@@ -590,14 +763,13 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                             color = MediumGray
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            progress = { progressPct },
+                        GradientLinearProgressIndicator(
+                            progress = progressPct,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp)),
-                            color = GoldClassic,
+                                .height(4.dp),
                             trackColor = LightGrayDivider,
+                            shape = RoundedCornerShape(2.dp)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -657,14 +829,13 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                                     color = MediumGray
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
-                                LinearProgressIndicator(
-                                    progress = { pct },
+                                GradientLinearProgressIndicator(
+                                    progress = pct,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(4.dp)
-                                        .clip(RoundedCornerShape(2.dp)),
-                                    color = GoldClassic,
+                                        .height(4.dp),
                                     trackColor = LightGrayDivider,
+                                    shape = RoundedCornerShape(2.dp)
                                 )
                             }
                         } else {
@@ -698,14 +869,16 @@ fun TodoListPage(viewModel: OperationsViewModel) {
     Scaffold(
         containerColor = WhitePure,
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = GoldClassic,
-                contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier.testTag("add_task_fab")
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(GradientTokens.sunsetVertical)
+                    .clickable { showAddDialog = true }
+                    .testTag("add_task_fab"),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Task")
+                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Task", tint = Color.White)
             }
         }
     ) { innerPadding ->
@@ -2664,7 +2837,8 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
     // Journal states
     val journalEntries by viewModel.journalEntries.collectAsState()
 
-    var activeTab by remember { mutableStateOf("Streak") } // "Streak", "Kegel", "Respiration", "Stop-Start", "Journal"
+    val activeTabState = viewModel.recoveryActiveTab.collectAsState()
+    val activeTab = activeTabState.value
 
     Column(
         modifier = Modifier
@@ -2767,7 +2941,7 @@ fun RecoveryPage(viewModel: OperationsViewModel) {
                 Box(
                     modifier = Modifier
                         .background(if (isSel) GoldClassic else Color.Transparent, RoundedCornerShape(10.dp))
-                        .clickable { activeTab = tab }
+                        .clickable { viewModel.setRecoveryActiveTab(tab) }
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Text(
@@ -2839,14 +3013,13 @@ fun StreakSection(currentStreak: Int, pastStreaks: List<RecoveryStreak>, onReset
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LinearProgressIndicator(
-                    progress = { pct },
+                GradientLinearProgressIndicator(
+                    progress = pct,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    color = GoldClassic,
-                    trackColor = LightGrayDivider
+                        .height(8.dp),
+                    trackColor = LightGrayDivider,
+                    shape = RoundedCornerShape(4.dp)
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -3055,6 +3228,69 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
 
     val scaleValue = remember { Animatable(1f) }
 
+    // Reverse Kegel Timer States
+    var activeTimerTab by remember { mutableStateOf("Classic") } // "Classic", "Reverse"
+    var reverseIsRunning by remember { mutableStateOf(false) }
+    var reverseInhaling by remember { mutableStateOf(true) } // true = inhale (expand), false = exhale (relax/push)
+    var reverseSecondsLeft by remember { mutableStateOf(4) }
+    var reverseCycleCount by remember { mutableStateOf(0) }
+
+    val reverseScaleValue = remember { Animatable(1f) }
+
+    LaunchedEffect(reverseIsRunning, reverseInhaling) {
+        if (reverseIsRunning) {
+            while (reverseIsRunning) {
+                delay(1000)
+                if (reverseSecondsLeft > 1) {
+                    reverseSecondsLeft--
+                } else {
+                    reverseInhaling = !reverseInhaling
+                    reverseSecondsLeft = 4
+                    if (reverseInhaling) {
+                        reverseCycleCount++
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(reverseInhaling, reverseIsRunning) {
+        if (reverseIsRunning) {
+            if (reverseInhaling) {
+                reverseScaleValue.animateTo(
+                    targetValue = 1.3f,
+                    animationSpec = tween(durationMillis = 4000, easing = LinearEasing)
+                )
+            } else {
+                reverseScaleValue.animateTo(
+                    targetValue = 0.9f,
+                    animationSpec = tween(durationMillis = 4000, easing = LinearEasing)
+                )
+            }
+        } else {
+            reverseScaleValue.animateTo(1f)
+        }
+    }
+
+    // Pelvic Tension States & Weekly Checks
+    val pelvicChecks by viewModel.pelvicTensionChecks.collectAsState()
+    val currentWeekStart = remember {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.SUNDAY)
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        sdf.format(cal.time)
+    }
+    val checkForThisWeek = pelvicChecks.firstOrNull { it.weekStartDate == currentWeekStart }
+
+    val hasTwoWeeksConsecutiveTension = remember(pelvicChecks) {
+        if (pelvicChecks.size >= 2) {
+            val sorted = pelvicChecks.sortedByDescending { it.weekStartDate }
+            sorted.size >= 2 && sorted[0].tensionReported && sorted[1].tensionReported
+        } else {
+            false
+        }
+    }
+
     LaunchedEffect(isContracting, isRunning) {
         if (isRunning) {
             if (isContracting) {
@@ -3078,6 +3314,46 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
     val todayKegelLog = kegelLogs.firstOrNull { it.date == todayStr } ?: KegelLog(date = todayStr)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (hasTwoWeeksConsecutiveTension) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFFFF9C4), RoundedCornerShape(12.dp)) // fond ambre clair
+                    .border(1.dp, Color(0xFFFBC02D), RoundedCornerShape(12.dp))
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("⚠️", fontSize = 16.sp)
+                    Text(
+                        text = "Tension pelvienne signalée plusieurs semaines de suite — réduis temporairement l'intensité des contractions (moins de répétitions, tenues plus courtes) et privilégie le relâchement. Si la gêne persiste, consulte un kinésithérapeute pelvien.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF5D4037),
+                        lineHeight = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        // Reverse Kegel Encart Éducatif
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "L'importance du Relâchement Pelvien (Reverse Kegel)",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Un plancher pelvien trop tendu chroniquement (hypertonique) peut aggraver l'éjaculation précoce et créer des douleurs pelviennes — l'inverse de l'effet recherché. Le relâchement volontaire est aussi important que le renforcement.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+
         // --- HEADER COMPLET DU PROGRAMME PROGRESSIF ---
         OperationsCard {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -3120,11 +3396,11 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
 
                 // Progress Bar
                 val globalProgress = (weekNumber.toFloat() / 24f).coerceIn(0f, 1f)
-                LinearProgressIndicator(
-                    progress = { globalProgress },
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                    color = GoldClassic,
-                    trackColor = LightGrayDivider
+                GradientLinearProgressIndicator(
+                    progress = globalProgress,
+                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                    trackColor = LightGrayDivider,
+                    shape = RoundedCornerShape(4.dp)
                 )
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -3326,6 +3602,24 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
 
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightGrayBg, RoundedCornerShape(8.dp))
+                        .clickable { viewModel.toggleKegelLogSession(todayStr, "reverse") }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    PremiumCheckbox(
+                        checked = todayKegelLog.reverseDone,
+                        onCheckedChange = { viewModel.toggleKegelLogSession(todayStr, "reverse") }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Relâchement Pelvien (Reverse Kegel)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -3347,105 +3641,292 @@ fun KegelSection(viewModel: OperationsViewModel, isTodayChecked: Boolean, totalS
         }
 
         // --- TIMER GUI CARD ---
-        OperationsCard(borderAccent = isRunning) {
+        OperationsCard(borderAccent = isRunning || reverseIsRunning) {
             Column(
                 modifier = Modifier.padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (!isRunning) {
-                    Text("Lancer une séance guidée", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-
+                // Selector tabs if neither is running
+                if (!isRunning && !reverseIsRunning) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(LightGrayBg, RoundedCornerShape(10.dp))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text("Type d'exercice :", fontSize = 12.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf("Longues", "Rapides").forEach { v ->
-                                val isS = variantConfig == v
-                                Box(
-                                    modifier = Modifier
-                                        .background(if (isS) LightBeige else Color.Transparent, RoundedCornerShape(8.dp))
-                                        .border(1.dp, if (isS) GoldClassic else LightGrayDivider, RoundedCornerShape(8.dp))
-                                        .clickable { variantConfig = v }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text(
-                                        text = if (v == "Longues") "Lentes (${phase.slowHoldSeconds}s)" else "Rapides (1s)",
-                                        fontSize = 10.sp,
-                                        color = if (isS) GoldClassic else MediumGray,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                        listOf("Classic" to "Kegel Classique", "Reverse" to "Relâchement (Reverse)").forEach { (tabId, label) ->
+                            val isS = activeTimerTab == tabId
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(if (isS) GoldClassic else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .clickable { activeTimerTab = tabId }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isS) Color.White else MediumGray
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (activeTimerTab == "Reverse") {
+                    if (!reverseIsRunning) {
+                        Text("Séance guidée de Reverse Kegel (5 minutes)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Cette routine favorise la détente et l'allongement du plancher pelvien. Calquez votre respiration sur les mouvements du cercle : inspirez profondément pour étendre, expirez longuement pour relâcher.",
+                            fontSize = 11.sp,
+                            color = MediumGray,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        GoldGradientButton(
+                            text = "Commencer le relâchement",
+                            onClick = {
+                                reverseIsRunning = true
+                                reverseInhaling = true
+                                reverseSecondsLeft = 4
+                                reverseCycleCount = 0
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Cycles de respiration : $reverseCycleCount",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic
+                            )
+                            Text(
+                                text = "Temps restant : ${if (reverseCycleCount >= 37) "Fini !" else "${300 - (reverseCycleCount * 8 + (4 - reverseSecondsLeft))}s"}",
+                                fontSize = 12.sp,
+                                color = MediumGray,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .size(160.dp)
+                                .graphicsLayer {
+                                    scaleX = reverseScaleValue.value
+                                    scaleY = reverseScaleValue.value
+                                }
+                                .background(
+                                    color = if (reverseInhaling) GoldClassic.copy(alpha = 0.08f) else Color(0xFFE1F5FE),
+                                    shape = CircleShape
+                                )
+                                .border(2.dp, if (reverseInhaling) GoldClassic else Color(0xFF0288D1), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (reverseInhaling) "INSPIRER" else "RELACHER",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (reverseInhaling) GoldClassic else Color(0xFF0288D1)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${reverseSecondsLeft}s",
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Anthracite
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { reverseIsRunning = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Arrêter la séance", color = Color.White)
+                        }
+                    }
+                } else {
+                    // Classic Timer UI
+                    if (!isRunning) {
+                        Text("Lancer une séance guidée", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Type d'exercice :", fontSize = 12.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf("Longues", "Rapides").forEach { v ->
+                                    val isS = variantConfig == v
+                                    Box(
+                                        modifier = Modifier
+                                            .background(if (isS) LightBeige else Color.Transparent, RoundedCornerShape(8.dp))
+                                            .border(1.dp, if (isS) GoldClassic else LightGrayDivider, RoundedCornerShape(8.dp))
+                                            .clickable { variantConfig = v }
+                                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = if (v == "Longues") "Lentes (${phase.slowHoldSeconds}s)" else "Rapides (1s)",
+                                            fontSize = 10.sp,
+                                            color = if (isS) GoldClassic else MediumGray,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                    Text(
-                        text = "Cette séance effectuera $repsConfig répétitions de contractions ${variantConfig.lowercase()}.",
-                        fontSize = 11.sp,
-                        color = MediumGray,
-                        textAlign = TextAlign.Center
-                    )
+                        Text(
+                            text = "Cette séance effectuera $repsConfig répétitions de contractions ${variantConfig.lowercase()}.",
+                            fontSize = 11.sp,
+                            color = MediumGray,
+                            textAlign = TextAlign.Center
+                        )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                    GoldGradientButton(
-                        text = "Commencer la routine",
-                        onClick = { viewModel.startKegelTimer(repsConfig, variantConfig) },
-                        modifier = Modifier.fillMaxWidth().testTag("start_kegel_button")
-                    )
-                } else {
-                    Text(
-                        text = "Répétition $currentRep sur $repsConfig",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = GoldClassic
-                    )
+                        GoldGradientButton(
+                            text = "Commencer la routine",
+                            onClick = { viewModel.startKegelTimer(repsConfig, variantConfig) },
+                            modifier = Modifier.fillMaxWidth().testTag("start_kegel_button")
+                        )
+                    } else {
+                        Text(
+                            text = "Répétition $currentRep sur $repsConfig",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic
+                        )
 
-                    Box(
-                        modifier = Modifier
-                            .size(160.dp)
-                            .graphicsLayer {
-                                scaleX = scaleValue.value
-                                scaleY = scaleValue.value
+                        Box(
+                            modifier = Modifier
+                                .size(160.dp)
+                                .graphicsLayer {
+                                    scaleX = scaleValue.value
+                                    scaleY = scaleValue.value
+                                }
+                                .background(
+                                    color = if (isContracting) GoldClassic.copy(alpha = 0.15f) else Color(0xFFF5F5F5),
+                                    shape = CircleShape
+                                )
+                                .border(2.dp, if (isContracting) GoldClassic else MediumGray, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (isContracting) "CONTRACTER" else "RELACHER",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isContracting) GoldClassic else MediumGray
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${secondsLeft}s",
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Anthracite
+                                )
                             }
-                            .background(
-                                color = if (isContracting) GoldClassic.copy(alpha = 0.15f) else Color(0xFFF5F5F5),
-                                shape = CircleShape
-                            )
-                            .border(2.dp, if (isContracting) GoldClassic else MediumGray, CircleShape),
-                        contentAlignment = Alignment.Center
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = { viewModel.stopKegelTimer() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Arrêter la séance", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- WEEKLY PELVIC TENSION OVERTRAINING CHECK ---
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Bilan hebdomadaire de surcharge (Surentraînement)",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Une question simple une fois par semaine pour prévenir l'hypertonie pelvienne et adapter l'intensité.",
+                    fontSize = 11.sp,
+                    color = MediumGray
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (checkForThisWeek != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Bilan de la semaine effectué", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumGray)
+                        Box(
+                            modifier = Modifier
+                                .background(if (checkForThisWeek.tensionReported) Color(0xFFFFF3E0) else Color(0xFFE8F5E9), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
                             Text(
-                                text = if (isContracting) "CONTRACTER" else "RELACHER",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isContracting) GoldClassic else MediumGray
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "${secondsLeft}s",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Anthracite
+                                text = if (checkForThisWeek.tensionReported) "Tension signalée" else "Pas de tension",
+                                fontSize = 10.sp,
+                                color = if (checkForThisWeek.tensionReported) Color(0xFFE65100) else Color(0xFF2E7D32),
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
-
+                } else {
+                    Text(
+                        text = "Cette semaine, as-tu ressenti une tension, gêne ou douleur pelvienne inhabituelle ?",
+                        fontSize = 11.sp,
+                        color = Anthracite,
+                        fontWeight = FontWeight.Medium
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-
-                    Button(
-                        onClick = { viewModel.stopKegelTimer() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Arrêter la séance", color = Color.White)
+                        Button(
+                            onClick = { viewModel.savePelvicTensionCheck(currentWeekStart, true) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFF3E0)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Oui", color = Color(0xFFE65100), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = { viewModel.savePelvicTensionCheck(currentWeekStart, false) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE8F5E9)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Non", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
                     }
                 }
             }
@@ -3843,8 +4324,16 @@ fun RespirationSection(viewModel: OperationsViewModel, totalSessions: Int) {
         if (isRunning) {
             when (state) {
                 "IN" -> scaleValue.animateTo(1.4f, animationSpec = tween(durationMillis = 4000, easing = LinearEasing))
-                "HOLD" -> { /* Stays large */ }
-                "OUT" -> scaleValue.animateTo(0.9f, animationSpec = tween(durationMillis = 6000, easing = LinearEasing))
+                "HOLD_HIGH" -> {
+                    // Subtle 2-second pulse: up slightly then back to max
+                    scaleValue.animateTo(1.43f, animationSpec = tween(durationMillis = 1000, easing = LinearEasing))
+                    scaleValue.animateTo(1.4f, animationSpec = tween(durationMillis = 1000, easing = LinearEasing))
+                }
+                "OUT" -> scaleValue.animateTo(0.9f, animationSpec = tween(durationMillis = 7000, easing = LinearEasing))
+                "HOLD_LOW" -> {
+                    // Stays small for 2 seconds
+                    scaleValue.animateTo(0.9f, animationSpec = tween(durationMillis = 2000, easing = LinearEasing))
+                }
             }
         } else {
             scaleValue.animateTo(1f)
@@ -3912,9 +4401,10 @@ fun RespirationSection(viewModel: OperationsViewModel, totalSessions: Int) {
                 } else {
                     // Running guided breathing UI
                     val currentCycleLabel = when (state) {
-                        "IN" -> "INSPIRER (ventre gonflé)"
-                        "HOLD" -> "RETENIR L'AIR"
-                        "OUT" -> "EXPIRER lentement"
+                        "IN" -> "Inspire"
+                        "HOLD_HIGH" -> "Retiens"
+                        "OUT" -> "Expire"
+                        "HOLD_LOW" -> "Retiens"
                         else -> ""
                     }
 
@@ -3935,7 +4425,9 @@ fun RespirationSection(viewModel: OperationsViewModel, totalSessions: Int) {
                             .background(
                                 color = when (state) {
                                     "IN" -> GoldClassic.copy(alpha = 0.2f)
-                                    "HOLD" -> GoldClassic.copy(alpha = 0.12f)
+                                    "HOLD_HIGH" -> GoldClassic.copy(alpha = 0.15f)
+                                    "OUT" -> Color(0xFFEBEBEB)
+                                    "HOLD_LOW" -> Color(0xFFDCDCDC)
                                     else -> Color(0xFFEBEBEB)
                                 },
                                 shape = CircleShape
@@ -4214,9 +4706,11 @@ fun StopStartSection() {
 @Composable
 fun JournalSection(viewModel: OperationsViewModel, pastEntries: List<JournalEntry>) {
     var journalText by remember { mutableStateOf("") }
+    var dailyWinText by remember { mutableStateOf("") }
     var stressVal by remember { mutableFloatStateOf(5f) }
     var tensionVal by remember { mutableFloatStateOf(5f) }
     var motivationVal by remember { mutableFloatStateOf(5f) }
+    var performanceAnxietyVal by remember { mutableFloatStateOf(1f) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Journal entry form
@@ -4280,6 +4774,50 @@ fun JournalSection(viewModel: OperationsViewModel, pastEntries: List<JournalEntr
                     )
                 }
 
+                // Performance Anxiety slider
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Anxiété de Performance Sexuelle", fontSize = 11.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+                        Text("${performanceAnxietyVal.toInt()}/10", fontSize = 11.sp, color = GoldClassic, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = performanceAnxietyVal,
+                        onValueChange = { performanceAnxietyVal = it },
+                        valueRange = 1f..10f,
+                        steps = 9,
+                        colors = SliderDefaults.colors(thumbColor = GoldClassic, activeTrackColor = GoldClassic)
+                    )
+                }
+
+                // Daily Win Input
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Une victoire aujourd'hui, même petite ? 🏆",
+                        fontSize = 11.sp,
+                        color = Anthracite,
+                        fontWeight = FontWeight.Bold
+                    )
+                    OutlinedTextField(
+                        value = dailyWinText,
+                        onValueChange = { dailyWinText = it },
+                        placeholder = {
+                            Text(
+                                "Ex: j'ai bien géré une conversation difficile, j'ai fini une tâche importante...",
+                                fontSize = 11.sp,
+                                color = MediumGray
+                            )
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .testTag("daily_win_input")
+                    )
+                }
+
                 GoldGradientButton(
                     text = "Sauvegarder l'entrée",
                     onClick = {
@@ -4287,12 +4825,18 @@ fun JournalSection(viewModel: OperationsViewModel, pastEntries: List<JournalEntr
                             journalText,
                             stressVal.toInt(),
                             tensionVal.toInt(),
-                            motivationVal.toInt()
+                            motivationVal.toInt(),
+                            performanceAnxietyVal.toInt()
                         )
+                        if (dailyWinText.isNotBlank()) {
+                            viewModel.saveDailyWin(viewModel.getTodayDate(), dailyWinText)
+                        }
                         journalText = ""
+                        dailyWinText = ""
                         stressVal = 5f
                         tensionVal = 5f
                         motivationVal = 5f
+                        performanceAnxietyVal = 1f
                     },
                     modifier = Modifier.fillMaxWidth().testTag("save_journal_button")
                 )
@@ -4314,6 +4858,7 @@ fun JournalSection(viewModel: OperationsViewModel, pastEntries: List<JournalEntr
                                     Text("Stress: ${entry.stress}", fontSize = 10.sp, color = MediumGray)
                                     Text("Tension: ${entry.tension}", fontSize = 10.sp, color = MediumGray)
                                     Text("Motiv: ${entry.motivation}", fontSize = 10.sp, color = MediumGray)
+                                    Text("Anx. Perf: ${entry.performanceAnxiety}", fontSize = 10.sp, color = MediumGray)
                                 }
                             }
                             if (entry.text.isNotEmpty()) {
@@ -5125,7 +5670,7 @@ fun SettingsPage(viewModel: OperationsViewModel) {
                         color = Anthracite
                     )
 
-                    Button(
+                    PremiumGradientButton(
                         onClick = {
                             val calendar = Calendar.getInstance()
                             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -5145,9 +5690,8 @@ fun SettingsPage(viewModel: OperationsViewModel) {
                                 calendar.get(Calendar.DAY_OF_MONTH)
                             ).show()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.testTag("select_kegel_start_date")
+                        modifier = Modifier.testTag("select_kegel_start_date"),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Modifier", color = WhitePure, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
@@ -5207,9 +5751,8 @@ fun SettingsPage(viewModel: OperationsViewModel) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Button(
+                    PremiumGradientButton(
                         onClick = { exportLauncher.launch("directeur_operations_backup.json") },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f).testTag("export_button")
                     ) {
@@ -5440,6 +5983,8 @@ fun TestosteronePage(viewModel: OperationsViewModel) {
     val gymSessions by viewModel.gymSessions.collectAsState()
     val journalEntries by viewModel.journalEntries.collectAsState()
     val supplementLogs by viewModel.supplementLogs.collectAsState()
+    val cardioHealthLogs by viewModel.cardioHealthLogs.collectAsState()
+    val morningErectionLogs by viewModel.morningErectionLogs.collectAsState()
 
     val todayStr = viewModel.getTodayDate()
     val todaySunLog = sunExposureLogs.firstOrNull { it.date == todayStr } ?: SunExposureLog(date = todayStr)
@@ -5595,9 +6140,8 @@ fun TestosteronePage(viewModel: OperationsViewModel) {
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Button(
+                    PremiumGradientButton(
                         onClick = { viewModel.logSunExposure(selectedMinutes) },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -5690,7 +6234,7 @@ fun TestosteronePage(viewModel: OperationsViewModel) {
             color = Anthracite
         )
 
-        val indicators = remember(sleepLogs, gymSessions, journalEntries, sunExposureLogs, supplementLogs, last7Days) {
+        val indicators = remember(sleepLogs, gymSessions, journalEntries, sunExposureLogs, supplementLogs, cardioHealthLogs, last7Days) {
             // 1. Sleep avg
             val recentSleeps = sleepLogs.filter { it.date in last7Days }
             val avgSleep = if (recentSleeps.isNotEmpty()) recentSleeps.map { it.durationHours }.sum() / recentSleeps.size else 0f
@@ -5719,6 +6263,16 @@ fun TestosteronePage(viewModel: OperationsViewModel) {
             val cardioCount = gymSessions.count { it.date in last7Days && it.muscleGroups.contains("Cardio", ignoreCase = true) }
             val cardioOk = cardioCount >= 3
 
+            // 7. BP avg
+            val recentCardios = cardioHealthLogs.filter { it.date in last7Days }
+            val avgSyst = if (recentCardios.any { it.systolicBP != null }) recentCardios.mapNotNull { it.systolicBP }.average().toInt() else null
+            val avgDiast = if (recentCardios.any { it.diastolicBP != null }) recentCardios.mapNotNull { it.diastolicBP }.average().toInt() else null
+            val bpOk = avgSyst == null || (avgSyst < 130 && avgDiast != null && avgDiast < 85)
+
+            // 8. Smoke free days
+            val smokeFreeCount = 7 - recentCardios.count { it.tobaccoUsed }
+            val tobaccoOk = smokeFreeCount == 7
+
             listOf(
                 IndicatorItem(
                     label = "Sommeil Moyen",
@@ -5740,6 +6294,20 @@ fun TestosteronePage(viewModel: OperationsViewModel) {
                     desc = "Cible: 4 par semaine",
                     isGood = cardioOk,
                     icon = Icons.AutoMirrored.Filled.DirectionsRun
+                ),
+                IndicatorItem(
+                    label = "Tension Artérielle",
+                    value = if (avgSyst != null && avgDiast != null) "$avgSyst/$avgDiast mmHg" else "Non mesurée",
+                    desc = "Cible: < 120/80 mmHg",
+                    isGood = bpOk,
+                    icon = Icons.Default.Favorite
+                ),
+                IndicatorItem(
+                    label = "Jours sans Tabac",
+                    value = "$smokeFreeCount / 7 jours",
+                    desc = "Cible: 7 jours (Sans tabac)",
+                    isGood = tobaccoOk,
+                    icon = Icons.Default.CheckCircle
                 ),
                 IndicatorItem(
                     label = "Niveau de Stress",
@@ -5842,6 +6410,314 @@ fun TestosteronePage(viewModel: OperationsViewModel) {
                     }
                     if (indicator != indicators.last()) {
                         Divider(color = LightGrayDivider)
+                    }
+                }
+            }
+        }
+
+        // --- SECTION NOUVELLE : SANTÉ CARDIOVASCULAIRE ---
+        Text(
+            text = "Santé Cardiovasculaire",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        var systolicStr by remember { mutableStateOf("") }
+        var diastolicStr by remember { mutableStateOf("") }
+        var waistStr by remember { mutableStateOf("") }
+        var alcoholUnitsVal by remember { mutableFloatStateOf(0f) }
+        var tobaccoUsed by remember { mutableStateOf(false) }
+
+        val todayCardio = cardioHealthLogs.firstOrNull { it.date == todayStr }
+
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Suivi des biomarqueurs cardiovasculaires",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                
+                // Medical Warning label
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightBeige, RoundedCornerShape(8.dp))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = "⚠️ AVERTISSEMENT MÉDICAL : Ces données sont indicatives et ne remplacent pas un avis médical ou un diagnostic professionnel.",
+                        fontSize = 10.sp,
+                        color = GoldClassic,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 14.sp
+                    )
+                }
+
+                if (todayCardio != null) {
+                    // Show logged data
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Tension Artérielle :", fontSize = 11.sp, color = MediumGray)
+                            Text(
+                                text = if (todayCardio.systolicBP != null && todayCardio.diastolicBP != null) "${todayCardio.systolicBP}/${todayCardio.diastolicBP} mmHg" else "Non renseignée",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Tour de Taille :", fontSize = 11.sp, color = MediumGray)
+                            Text(
+                                text = if (todayCardio.waistCircumferenceCm != null) "${todayCardio.waistCircumferenceCm} cm" else "Non renseigné",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Consommation d'Alcool :", fontSize = 11.sp, color = MediumGray)
+                            Text(
+                                text = "${todayCardio.alcoholUnits} unités standard",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (todayCardio.alcoholUnits > 0) Color(0xFFC62828) else Color(0xFF2E7D32)
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Consommation de Tabac :", fontSize = 11.sp, color = MediumGray)
+                            Text(
+                                text = if (todayCardio.tobaccoUsed) "Oui (Fumeur)" else "Non (Optimal)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (todayCardio.tobaccoUsed) Color(0xFFC62828) else Color(0xFF2E7D32)
+                            )
+                        }
+                    }
+                } else {
+                    // Form fields
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = systolicStr,
+                            onValueChange = { systolicStr = it },
+                            label = { Text("Systolique (ex: 120)", fontSize = 10.sp) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = diastolicStr,
+                            onValueChange = { diastolicStr = it },
+                            label = { Text("Diastolique (ex: 80)", fontSize = 10.sp) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = waistStr,
+                        onValueChange = { waistStr = it },
+                        label = { Text("Tour de Taille en cm (ex: 94)", fontSize = 11.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Column {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Alcool (Unités standard)", fontSize = 11.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+                            Text("${alcoholUnitsVal.toInt()} u", fontSize = 11.sp, color = GoldClassic, fontWeight = FontWeight.Bold)
+                        }
+                        Slider(
+                            value = alcoholUnitsVal,
+                            onValueChange = { alcoholUnitsVal = it },
+                            valueRange = 0f..15f,
+                            steps = 14,
+                            colors = SliderDefaults.colors(thumbColor = GoldClassic, activeTrackColor = GoldClassic)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Consommation de tabac aujourd'hui :", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Switch(
+                            checked = tobaccoUsed,
+                            onCheckedChange = { tobaccoUsed = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige)
+                        )
+                    }
+
+                    GoldGradientButton(
+                        text = "Enregistrer la santé cardiovasculaire",
+                        onClick = {
+                            val syst = systolicStr.toIntOrNull()
+                            val diast = diastolicStr.toIntOrNull()
+                            val waist = waistStr.toFloatOrNull()
+                            viewModel.saveCardioHealthLog(todayStr, syst, diast, waist, alcoholUnitsVal.toInt(), tobaccoUsed)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        // --- SECTION NOUVELLE : ÉRECTIONS MATINALES ---
+        Text(
+            text = "Suivi des Érections Matinales",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        val todayErectionLog = morningErectionLogs.firstOrNull { it.date == todayStr }
+
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Évaluation de la qualité au réveil",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Text(
+                    text = "L'érection matinale est un indicateur clé de la santé cardiovasculaire et de l'équilibre hormonal de la testostérone libre.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (todayErectionLog != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Aujourd'hui :", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumGray)
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    when (todayErectionLog.quality) {
+                                        "Oui" -> Color(0xFFE8F5E9)
+                                        "Partielle" -> Color(0xFFFFF3E0)
+                                        else -> Color(0xFFFFEBEE)
+                                    },
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = todayErectionLog.quality,
+                                fontSize = 11.sp,
+                                color = when (todayErectionLog.quality) {
+                                    "Oui" -> Color(0xFF2E7D32)
+                                    "Partielle" -> Color(0xFFE65100)
+                                    else -> Color(0xFFC62828)
+                                },
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Oui", "Partielle", "Non").forEach { q ->
+                            Button(
+                                onClick = { viewModel.saveMorningErectionLog(todayStr, q) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = when (q) {
+                                        "Oui" -> Color(0xFFE8F5E9)
+                                        "Partielle" -> Color(0xFFFFF3E0)
+                                        else -> Color(0xFFFFEBEE)
+                                    }
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = q,
+                                    color = when (q) {
+                                        "Oui" -> Color(0xFF2E7D32)
+                                        "Partielle" -> Color(0xFFE65100)
+                                        else -> Color(0xFFC62828)
+                                    },
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Divider(color = LightGrayDivider)
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // 7-day visual history
+                Text("Historique visuel des 7 derniers jours :", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    last7Days.forEach { date ->
+                        val label = viewModel.getDayOfWeekLabel(date)
+                        val log = morningErectionLogs.firstOrNull { it.date == date }
+                        
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 9.sp,
+                                color = if (date == todayStr) GoldClassic else MediumGray,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(
+                                        when (log?.quality) {
+                                            "Oui" -> Color(0xFFE8F5E9)
+                                            "Partielle" -> Color(0xFFFFF3E0)
+                                            "Non" -> Color(0xFFFFEBEE)
+                                            else -> Color(0xFFF5F5F5)
+                                        },
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = when (log?.quality) {
+                                        "Oui" -> "✓"
+                                        "Partielle" -> "P"
+                                        "Non" -> "✗"
+                                        else -> "•"
+                                    },
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (log?.quality) {
+                                        "Oui" -> Color(0xFF2E7D32)
+                                        "Partielle" -> Color(0xFFE65100)
+                                        "Non" -> Color(0xFFC62828)
+                                        else -> MediumGray
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -6350,6 +7226,53 @@ fun CommunicationPage(viewModel: OperationsViewModel) {
             }
         }
 
+        // Module 6
+        var m6Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { m6Expanded = !m6Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Module 6 — Préparation de couple",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (m6Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (m6Expanded) "Réduire" else "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (m6Expanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BulletPoint(
+                            boldText = "Parler de sa démarche",
+                            normalText = "dévoiler son protocole et ses efforts de manière positive et sereine, sans projeter d'anxiété."
+                        )
+                        BulletPoint(
+                            boldText = "Co-construction des règles",
+                            normalText = "définir ensemble ce que l'autre accepte ou pas dans l'intimité pour avancer en confiance."
+                        )
+                        BulletPoint(
+                            boldText = "Gestion d'équipe",
+                            normalText = "faire du couple une force alliée et complice plutôt qu'un lieu d'évaluation nerveuse ou de jugement mutuel."
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
@@ -6673,7 +7596,7 @@ fun SurviveGreatResetPage(viewModel: OperationsViewModel) {
                         }
 
                         // Add Button
-                        Button(
+                        PremiumGradientButton(
                             onClick = {
                                 val qty = itemQtyInput.toFloatOrNull()
                                 if (qty != null && itemNameInput.isNotBlank()) {
@@ -6692,7 +7615,6 @@ fun SurviveGreatResetPage(viewModel: OperationsViewModel) {
                                     expiryDateInput = ""
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -6852,14 +7774,13 @@ fun SurviveGreatResetPage(viewModel: OperationsViewModel) {
                         }
 
                         // Progress bar
-                        LinearProgressIndicator(
-                            progress = { safePercent / 100f },
+                        GradientLinearProgressIndicator(
+                            progress = safePercent / 100f,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            color = GoldClassic,
-                            trackColor = LightBeige
+                                .height(6.dp),
+                            trackColor = LightBeige,
+                            shape = RoundedCornerShape(3.dp)
                         )
 
                         // Collapsible Inventaire list
@@ -7191,6 +8112,4234 @@ fun PremiumCheckbox(
         }
     }
 }
+
+@Composable
+fun GradientLinearProgressIndicator(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    brush: Brush = GradientTokens.sunsetHorizontal,
+    trackColor: Color = LightGrayDivider,
+    shape: androidx.compose.ui.graphics.Shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        label = "ProgressAnimation"
+    )
+
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(trackColor)
+    ) {
+        if (animatedProgress > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animatedProgress)
+                    .background(brush)
+            )
+        }
+    }
+}
+
+@Composable
+fun PremiumGradientButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    brush: Brush = GradientTokens.sunsetVertical,
+    shape: androidx.compose.ui.graphics.Shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+    content: @Composable RowScope.() -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(brush)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            }
+            .padding(vertical = 12.dp, horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+fun PourquoiPage(viewModel: OperationsViewModel) {
+    val whyStatement by viewModel.whyStatement.collectAsState()
+    var isEditing by remember(whyStatement) { mutableStateOf<Boolean>(whyStatement.isEmpty()) }
+    var textVal by remember(whyStatement) { mutableStateOf<String>(whyStatement) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(24.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 600.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            Text(
+                text = "Ma Raison Profonde",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Anthracite,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+
+            Text(
+                text = "Ancrez votre motivation. Pourquoi suivez-vous ce protocole ? Pour qui ? Pour quelle version de vous-même ?",
+                fontSize = 14.sp,
+                color = MediumGray,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
+
+            if (whyStatement.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .border(
+                            width = 2.dp,
+                            brush = GradientTokens.sunsetHorizontal,
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(28.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "« $whyStatement »",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = Anthracite,
+                        lineHeight = 28.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else if (!isEditing) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightBeige, RoundedCornerShape(16.dp))
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Vous n'avez pas encore défini votre raison profonde. Prenez un instant pour y réfléchir.",
+                        fontSize = 13.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = GoldClassic,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            if (isEditing) {
+                OutlinedTextField(
+                    value = textVal,
+                    onValueChange = { textVal = it },
+                    placeholder = {
+                        Text(
+                            "Écrivez ici votre motivation profonde... (ex: Mon mariage à venir, ma vitalité au quotidien, être fier de l'homme que je deviens)",
+                            fontSize = 13.sp,
+                            color = MediumGray
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldClassic,
+                        unfocusedBorderColor = LightGrayDivider
+                    )
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Button(
+                        onClick = {
+                            isEditing = false
+                            textVal = whyStatement
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Annuler", color = Anthracite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    GoldGradientButton(
+                        text = "Enregistrer",
+                        onClick = {
+                            viewModel.saveWhyStatement(textVal)
+                            isEditing = false
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                GoldGradientButton(
+                    text = "Modifier ma raison profonde",
+                    onClick = { isEditing = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AffirmationsPage(viewModel: OperationsViewModel) {
+    val gratitudeLogs by viewModel.gratitudeLogs.collectAsState()
+    val todayStr = viewModel.getTodayDate()
+    
+    // Affirmation du moment state
+    var currentAffirmation by remember { mutableStateOf(AffirmationsData.getRandomAffirmation()) }
+    
+    // Gratitude input states
+    val todayLog = remember(gratitudeLogs, todayStr) { gratitudeLogs.find { it.date == todayStr } }
+    var g1 by remember(todayLog) { mutableStateOf(todayLog?.gratitude1 ?: "") }
+    var g2 by remember(todayLog) { mutableStateOf(todayLog?.gratitude2 ?: "") }
+    var g3 by remember(todayLog) { mutableStateOf(todayLog?.gratitude3 ?: "") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(horizontal = 20.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 600.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            PageHeader(
+                title = "Affirmations & Gratitude",
+                subtitle = "Programmez votre esprit pour le succès"
+            )
+
+            // SECTION 1: Affirmation du moment
+            Text(
+                text = "Affirmation du moment 💫",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Anthracite
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(16.dp))
+                    .border(
+                        width = 2.dp,
+                        brush = GradientTokens.sunsetHorizontal,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "« $currentAffirmation »",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = Anthracite,
+                        lineHeight = 28.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    GoldGradientButton(
+                        text = "Nouvelle affirmation",
+                        onClick = { currentAffirmation = AffirmationsData.getRandomAffirmation() },
+                        modifier = Modifier.testTag("new_affirmation_button")
+                    )
+                }
+            }
+
+            // SECTION 2: Gratitude du jour
+            Text(
+                text = "Gratitude du jour 🏆",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Anthracite
+            )
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LightBeige, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Aujourd'hui, je suis reconnaissant pour...",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+
+                    OutlinedTextField(
+                        value = g1,
+                        onValueChange = { g1 = it },
+                        placeholder = { Text("1. Première gratitude...", fontSize = 12.sp, color = MediumGray) },
+                        modifier = Modifier.fillMaxWidth().testTag("gratitude_input_1"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider,
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = g2,
+                        onValueChange = { g2 = it },
+                        placeholder = { Text("2. Deuxième gratitude...", fontSize = 12.sp, color = MediumGray) },
+                        modifier = Modifier.fillMaxWidth().testTag("gratitude_input_2"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider,
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = g3,
+                        onValueChange = { g3 = it },
+                        placeholder = { Text("3. Troisième gratitude...", fontSize = 12.sp, color = MediumGray) },
+                        modifier = Modifier.fillMaxWidth().testTag("gratitude_input_3"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider,
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        singleLine = true
+                    )
+
+                    GoldGradientButton(
+                        text = "Enregistrer mes gratitudes",
+                        onClick = {
+                            viewModel.saveGratitude(todayStr, g1, g2, g3)
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("save_gratitude_button")
+                    )
+                }
+            }
+
+            // Historique des gratitudes
+            val historicLogs = remember(gratitudeLogs, todayStr) {
+                gratitudeLogs.filter { it.date != todayStr && (it.gratitude1.isNotEmpty() || it.gratitude2.isNotEmpty() || it.gratitude3.isNotEmpty()) }
+            }
+
+            if (historicLogs.isNotEmpty()) {
+                Text(
+                    text = "Historique des gratitudes 📜",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+
+                historicLogs.forEach { log ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White, RoundedCornerShape(12.dp))
+                            .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+                            .padding(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val displayDate = try {
+                                val dateObj = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(log.date)
+                                if (dateObj != null) {
+                                    SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(dateObj)
+                                } else {
+                                    log.date
+                                }
+                            } catch (e: Exception) {
+                                log.date
+                            }
+                            Text(
+                                text = displayDate.replaceFirstChar { it.uppercase() },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic
+                            )
+                            if (log.gratitude1.isNotEmpty()) {
+                                Text(text = "• ${log.gratitude1}", fontSize = 12.sp, color = Anthracite)
+                            }
+                            if (log.gratitude2.isNotEmpty()) {
+                                Text(text = "• ${log.gratitude2}", fontSize = 12.sp, color = Anthracite)
+                            }
+                            if (log.gratitude3.isNotEmpty()) {
+                                Text(text = "• ${log.gratitude3}", fontSize = 12.sp, color = Anthracite)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // SECTION 3: Bibliothèque d'affirmations
+            Text(
+                text = "Bibliothèque d'affirmations 📚",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Anthracite
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .background(Color.White, RoundedCornerShape(16.dp))
+                    .border(1.dp, LightGrayDivider, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(AffirmationsData.affirmations.size) { index ->
+                        val affText = AffirmationsData.affirmations[index]
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "✨",
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(end = 8.dp, top = 2.dp)
+                            )
+                            Text(
+                                text = affText,
+                                fontSize = 13.sp,
+                                color = Anthracite,
+                                lineHeight = 18.sp
+                            )
+                        }
+                        if (index < AffirmationsData.affirmations.size - 1) {
+                            Divider(
+                                modifier = Modifier.padding(top = 8.dp),
+                                color = LightGrayDivider.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GlobalRespirationController(viewModel: OperationsViewModel, onDismiss: () -> Unit) {
+    var durationMinutes by remember { mutableStateOf(5) }
+
+    val isRunning by viewModel.breathingIsRunning.collectAsState()
+    val state by viewModel.breathingState.collectAsState()
+    val secondsLeft by viewModel.breathingSecondsLeft.collectAsState()
+    val totalElapsed by viewModel.breathingTotalSecondsElapsed.collectAsState()
+
+    val scaleValue = remember { Animatable(1f) }
+
+    LaunchedEffect(state, isRunning) {
+        if (isRunning) {
+            when (state) {
+                "IN" -> scaleValue.animateTo(1.4f, animationSpec = tween(durationMillis = 4000, easing = LinearEasing))
+                "HOLD_HIGH" -> {
+                    scaleValue.animateTo(1.43f, animationSpec = tween(durationMillis = 1000, easing = LinearEasing))
+                    scaleValue.animateTo(1.4f, animationSpec = tween(durationMillis = 1000, easing = LinearEasing))
+                }
+                "OUT" -> scaleValue.animateTo(0.9f, animationSpec = tween(durationMillis = 7000, easing = LinearEasing))
+                "HOLD_LOW" -> {
+                    scaleValue.animateTo(0.9f, animationSpec = tween(durationMillis = 2000, easing = LinearEasing))
+                }
+            }
+        } else {
+            scaleValue.animateTo(1f)
+        }
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (!isRunning) {
+            Text(
+                text = "Sélectionnez la durée de votre séance de cohérence cardiaque (4-2-7-2) :",
+                fontSize = 12.sp,
+                color = MediumGray,
+                textAlign = TextAlign.Center
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(3, 5, 10).forEach { m ->
+                    val isS = durationMinutes == m
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 6.dp)
+                            .background(if (isS) LightBeige else Color.Transparent, RoundedCornerShape(8.dp))
+                            .border(1.dp, if (isS) GoldClassic else LightGrayDivider, RoundedCornerShape(8.dp))
+                            .clickable { durationMinutes = m }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text("${m} min", fontSize = 12.sp, color = if (isS) GoldClassic else MediumGray, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            GoldGradientButton(
+                text = "Commencer la session",
+                onClick = { viewModel.startBreathingTimer(durationMinutes) },
+                modifier = Modifier.fillMaxWidth().testTag("global_start_breathing")
+            )
+        } else {
+            val currentCycleLabel = when (state) {
+                "IN" -> "Inspire"
+                "HOLD_HIGH" -> "Retiens"
+                "OUT" -> "Expire"
+                "HOLD_LOW" -> "Retiens"
+                else -> ""
+            }
+
+            val formattedElapsed = "${totalElapsed / 60}:${String.format("%02d", totalElapsed % 60)}"
+            Text(
+                text = "Séance en cours : $formattedElapsed / ${durationMinutes}:00",
+                fontSize = 13.sp,
+                color = MediumGray
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(160.dp)
+                    .graphicsLayer {
+                        scaleX = scaleValue.value
+                        scaleY = scaleValue.value
+                    }
+                    .background(
+                        color = when (state) {
+                            "IN" -> GoldClassic.copy(alpha = 0.2f)
+                            "HOLD_HIGH" -> GoldClassic.copy(alpha = 0.15f)
+                            "OUT" -> Color(0xFFEBEBEB)
+                            "HOLD_LOW" -> Color(0xFFDCDCDC)
+                            else -> Color(0xFFEBEBEB)
+                        },
+                        shape = CircleShape
+                    )
+                    .border(2.dp, GoldClassic, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = currentCycleLabel,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${secondsLeft}s",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Anthracite
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { viewModel.stopBreathingTimer() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                modifier = Modifier.fillMaxWidth().testTag("global_stop_breathing"),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Arrêter la séance", color = Color.White)
+            }
+        }
+    }
+}
+
+data class Expert(
+    val name: String,
+    val dates: String,
+    val domain: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val summary: String,
+    val metaphor: String
+)
+
+@Composable
+fun NeurosciencePage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Unit) {
+    var activeTab by remember { mutableStateOf("Comment ça marche") }
+    var currentLang by remember { mutableStateOf("FR") }
+
+    val tabs = listOf(
+        "Comment ça marche",
+        "Pourquoi ça revient",
+        "Affirmations",
+        "Switch Ideas",
+        "6 Experts"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            PageHeader(
+                title = "Neurosciences",
+                subtitle = "Comprendre, reprogrammer et reconditionner ses patterns mentaux"
+            )
+
+            // Horizontal Tab Selector styled with sunset indicator
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .background(LightGrayBg, RoundedCornerShape(12.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                tabs.forEach { tab ->
+                    val isSel = activeTab == tab
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                brush = if (isSel) GradientTokens.sunsetHorizontal else SolidColor(Color.Transparent),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable { activeTab = tab }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = tab,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSel) Color.White else MediumGray
+                        )
+                    }
+                }
+            }
+
+            // Language switcher row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Langue / اللغة : ",
+                    fontSize = 12.sp,
+                    color = MediumGray,
+                    fontWeight = FontWeight.Medium
+                )
+                Row(
+                    modifier = Modifier
+                        .background(LightGrayBg, RoundedCornerShape(16.dp))
+                        .padding(2.dp)
+                ) {
+                    listOf("FR", "AR").forEach { lang ->
+                        val isSel = currentLang == lang
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    brush = if (isSel) GradientTokens.sunsetHorizontal else SolidColor(Color.Transparent),
+                                    shape = RoundedCornerShape(14.dp)
+                                )
+                                .clickable { currentLang = lang }
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = lang,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSel) Color.White else MediumGray
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Tab Contents
+            when (activeTab) {
+                "Comment ça marche" -> CommentCaMarcheTab(currentLang)
+                "Pourquoi ça revient" -> PourquoiCaRevientTab(currentLang)
+                "Affirmations" -> AffirmationsInstantTab(currentLang, onNavigateToPage, viewModel)
+                "Switch Ideas" -> SwitchIdeasTab(currentLang, onNavigateToPage, viewModel)
+                "6 Experts" -> SixExpertsTab(currentLang)
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+        }
+    }
+}
+
+@Composable
+fun CommentCaMarcheTab(lang: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Section 1
+        NeuroscienceCard(
+            titleFr = "Les deux systèmes en compétition 🧠",
+            titleAr = "النظامان المتنافسان في الدماغ 🧠",
+            textFr = "Ton cerveau fonctionne avec deux systèmes en compétition permanente. Le Cortex Préfrontal (juste derrière ton front) analyse, planifie et résiste à l'impulsion — mais il est lent et se fatigue vite. Le Circuit Limbique (plus ancien, plus rapide) contient tes habitudes automatiques et ne réfléchit pas, il réagit. Le neurotransmetteur clé de ce second système est la dopamine.",
+            textAr = "يعمل دماغك بنظامين في حالة تنافس مستمر. قشرة الفص الجبهي (خلف جبهتك مباشرة) تحلل وتخطط وتقاوم الاندفاعات — لكنها بطيئة وتتعب بسرعة. أما الجهاز الحوفي (الأقدم والأسرع) فيحتوي على عاداتك التلقائية ولا يفكر بل يتفاعل. الناقل العصبي الأساسي لهذا النظام الثاني هو الدوبامين.",
+            lang = lang
+        )
+
+        // Section 2
+        NeuroscienceCard(
+            titleFr = "La dopamine n'est pas le plaisir 🎯",
+            titleAr = "الدوبامين ليس إشارة المتعة 🎯",
+            textFr = "Découverte du neuroscientifique Wolfram Schultz : la dopamine n'est pas le signal du plaisir, mais celui de la surprise — la différence entre ce que ton cerveau attendait et ce qu'il a réellement reçu. Des années de stimulation intense recalibrent ce système vers des pics très hauts, rendant les petites récompenses normales moins satisfaisantes.",
+            textAr = "اكتشاف عالم الأعصاب وولفرام شولتز: الدوبامين ليس إشارة المتعة، بل هو إشارة المفاجأة — الفرق بين ما كان يتوقعه دماغك وما تلقاه بالفعل. سنوات من التحفيز المكثف تعيد ضبط هذا النظام نحو قمم عالية جدًا، مما يجعل المكافآت الصغيرة العادية أقل إرضاءً.",
+            lang = lang
+        )
+
+        // Section 3
+        NeuroscienceCard(
+            titleFr = "Le principe de Hebb et la plasticité 🧬",
+            titleAr = "مبدأ هيب والمرونة العصبية 🧬",
+            textFr = "Les neurones qui s'activent ensemble renforcent leur connexion (Donald Hebb, 1949). À l'inverse, un chemin neuronal non utilisé s'affaiblit progressivement. C'est la base biologique de tout reconditionnement — chaque répétition consciente construit littéralement un nouveau chemin physique dans ton cerveau.",
+            textAr = "الخلايا العصبية التي تنشط معًا تقوي اتصالاتها (دونالد هيب، 1949). وعلى العكس، فإن المسار العصبي غير المستخدم يضعف تدريجيًا. هذا هو الأساس البيولوجي لكل إعادة برمجة — كل تكرار واعٍ يبني حرفيًا مسارًا ماديًا جديدًا في دماغك.",
+            lang = lang
+        )
+    }
+}
+
+@Composable
+fun NeuroscienceCard(
+    titleFr: String,
+    titleAr: String,
+    textFr: String,
+    textAr: String,
+    lang: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(12.dp))
+            .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+            .padding(16.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .align(Alignment.CenterVertically)
+                    .background(brush = GradientTokens.sunsetHorizontal, shape = RoundedCornerShape(2.dp))
+                    .height(60.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") titleFr else titleAr,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite,
+                    textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = if (lang == "FR") textFr else textAr,
+                    fontSize = 12.sp,
+                    color = Anthracite,
+                    lineHeight = 18.sp,
+                    textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PourquoiCaRevientTab(lang: String) {
+    val scope = rememberCoroutineScope()
+    val observeProgress = remember { Animatable(0f) }
+    val reactProgress = remember { Animatable(0f) }
+    var activeChoice by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Intro Text
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(LightBeige, RoundedCornerShape(12.dp))
+                .padding(14.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = if (lang == "FR") "Le mécanisme de l'impulsion ⚡" else "آلية الاندفاع المفاجئ ⚡",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic,
+                    textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = if (lang == "FR") {
+                        "Voici la séquence exacte de ce qui se passe quand un ancien pattern surgit soudainement : un déclencheur (fatigue, stress, ennui) active un chemin neuronal ancien et bien renforcé. Si ton cortex préfrontal est affaibli à ce moment (fatigue, stress), le circuit automatique prend le dessus avant que tu en aies pleinement conscience. C'est à l'instant où tu observes consciemment ce qui se passe que tu interromps la boucle."
+                    } else {
+                        "إليك التسلسل الدقيق لما يحدث عندما يظهر نمط قديم فجأة: محفز (تعب، توتر، ملل) ينشط مسارًا عصبيًا قديمًا وقويًا. إذا كانت قشرتك الجبهية الأمامية ضعيفة في تلك اللحظة (بسبب التعب أو التوتر)، فإن الدارة التلقائية تسيطر قبل أن تعي ذلك تمامًا. في اللحظة التي تلاحظ فيها ما يحدث بوعي تام، فإنك تقطع هذه الحلقة التلقائية."
+                    },
+                    fontSize = 12.sp,
+                    color = Anthracite,
+                    lineHeight = 18.sp,
+                    textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        // Illustration Title
+        Text(
+            text = if (lang == "FR") "Schéma d'interaction neuronal 🧠" else "مخطط التفاعل العصبي 🧠",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        // Illustration Interactive
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(280.dp)
+                .background(Color.White, RoundedCornerShape(16.dp))
+                .border(1.dp, LightGrayDivider, RoundedCornerShape(16.dp))
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val gridStep = 20.dp.toPx()
+                for (x in 0 until (size.width / gridStep).toInt()) {
+                    drawLine(
+                        color = Color.LightGray.copy(alpha = 0.15f),
+                        start = Offset(x * gridStep, 0f),
+                        end = Offset(x * gridStep, size.height),
+                        strokeWidth = 0.5f
+                    )
+                }
+                for (y in 0 until (size.height / gridStep).toInt()) {
+                    drawLine(
+                        color = Color.LightGray.copy(alpha = 0.15f),
+                        start = Offset(0f, y * gridStep),
+                        end = Offset(size.width, y * gridStep),
+                        strokeWidth = 0.5f
+                    )
+                }
+
+                val width = size.width
+                val height = size.height
+                val centerX = width / 2
+                val centerY = height / 2
+                val topY = height * 0.22f
+                val bottomY = height * 0.78f
+
+                // Base grey connections
+                drawLine(
+                    color = Color(0xFFE0E0E0),
+                    start = Offset(centerX, centerY),
+                    end = Offset(centerX, topY),
+                    strokeWidth = 4f
+                )
+                drawLine(
+                    color = Color(0xFFE0E0E0),
+                    start = Offset(centerX, centerY),
+                    end = Offset(centerX, bottomY),
+                    strokeWidth = 4f
+                )
+
+                // Draw active flows
+                if (activeChoice == "observe" && observeProgress.value > 0f) {
+                    val currentY = centerY - (centerY - topY) * observeProgress.value
+                    drawLine(
+                        brush = GradientTokens.sunsetHorizontal,
+                        start = Offset(centerX, centerY),
+                        end = Offset(centerX, currentY),
+                        strokeWidth = 8f,
+                        cap = StrokeCap.Round
+                    )
+                }
+
+                if (activeChoice == "react" && reactProgress.value > 0f) {
+                    val currentY = centerY + (bottomY - centerY) * reactProgress.value
+                    drawLine(
+                        color = Anthracite,
+                        start = Offset(centerX, centerY),
+                        end = Offset(centerX, currentY),
+                        strokeWidth = 8f,
+                        cap = StrokeCap.Round
+                    )
+                }
+
+                // Node Circles
+                // Prefrontal (Top)
+                drawCircle(
+                    brush = if (activeChoice == "observe" && observeProgress.value > 0.8f) GradientTokens.sunsetHorizontal else SolidColor(Color.Gray),
+                    radius = 28.dp.toPx(),
+                    center = Offset(centerX, topY)
+                )
+                // Center Trigger
+                drawCircle(
+                    color = Color(0xFFE65100),
+                    radius = 14.dp.toPx(),
+                    center = Offset(centerX, centerY)
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 6.dp.toPx(),
+                    center = Offset(centerX, centerY)
+                )
+                // Limbic (Bottom)
+                drawCircle(
+                    color = if (activeChoice == "react" && reactProgress.value > 0.8f) Anthracite else Color.Gray,
+                    radius = 28.dp.toPx(),
+                    center = Offset(centerX, bottomY)
+                )
+            }
+
+            // Labels over top circle
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 18.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "Cortex Préfrontal 🧠" else "قشرة الفص الجبهي 🧠",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = if (lang == "FR") "OBSERVATION" else "ملاحظة بوعي",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.85f),
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            // Label over Center Trigger
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 24.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = if (lang == "FR") "Déclencheur ⚡" else "المحفز ⚡",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE65100)
+                    )
+                    Text(
+                        text = if (lang == "FR") "(Fatigue, Stress, Ennui)" else "(تعب، توتر، ملل)",
+                        fontSize = 9.sp,
+                        color = MediumGray
+                    )
+                }
+            }
+
+            // Labels over bottom circle
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 18.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "Circuit Limbique 🔄" else "الجهاز الحوفي 🔄",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = if (lang == "FR") "RÉACTION AUTOMATIQUE" else "تفاعل تلقائي",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.85f),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        // Action Buttons Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = {
+                    scope.launch {
+                        activeChoice = "observe"
+                        reactProgress.snapTo(0f)
+                        observeProgress.snapTo(0f)
+                        observeProgress.animateTo(1f, animationSpec = tween(700, easing = LinearEasing))
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .testTag("button_observe"),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GoldClassic)
+            ) {
+                Text(
+                    text = if (lang == "FR") "J'observe 👁️" else "أنا ألاحظ 👁️",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        activeChoice = "react"
+                        observeProgress.snapTo(0f)
+                        reactProgress.snapTo(0f)
+                        reactProgress.animateTo(1f, animationSpec = tween(700, easing = LinearEasing))
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .testTag("button_react_auto"),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
+            ) {
+                Text(
+                    text = if (lang == "FR") "Je réagis 🔄" else "أنا أتفاعل تلقائياً 🔄",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+            }
+        }
+
+        // Result explanations
+        AnimatedVisibility(visible = activeChoice != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(12.dp))
+                    .border(
+                        width = 1.5.dp,
+                        brush = if (activeChoice == "observe") GradientTokens.sunsetHorizontal else SolidColor(Color.LightGray),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = if (activeChoice == "observe") {
+                            if (lang == "FR") "Effet : Court-circuit conscient 🧘" else "الأثر: قطع الدارة بوعي 🧘"
+                        } else {
+                            if (lang == "FR") "Effet : Renforcement du pattern 🔄" else "الأثر: تعزيز النمط التلقائي 🔄"
+                        },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (activeChoice == "observe") GoldClassic else Anthracite,
+                        textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = if (activeChoice == "observe") {
+                            if (lang == "FR") {
+                                "Le circuit d'observation se renforce. L'ancien circuit ne reçoit aucun renforcement cette fois."
+                            } else {
+                                "مسار المراقبة يتقوى تدريجيًا. المسار العصبي القديم لا يتلقى أي تعزيز هذه المرة مما يساهم في إضعافه."
+                            }
+                        } else {
+                            if (lang == "FR") {
+                                "L'ancien circuit reçoit un renforcement. Ce n'est pas un échec définitif — juste une donnée pour la prochaine fois."
+                            } else {
+                                "يتلقى المسار القديم تعزيزًا إضافيًا. هذا ليس فشلاً نهائيًا أبدًا — بل مجرد معلومة وتجربة للاستفادة منها في المرة القادمة."
+                            }
+                        },
+                        fontSize = 11.sp,
+                        color = Anthracite,
+                        lineHeight = 16.sp,
+                        textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AffirmationsInstantTab(lang: String, onNavigate: (Int) -> Unit, viewModel: OperationsViewModel) {
+    val items = listOf(
+        Pair(
+            "Ceci est un ancien circuit qui s'affaiblit. Je l'observe, je ne le nourris pas.",
+            "هذا مسار عصبي قديم يضعف. أنا أراقبه، ولا أغذيه."
+        ),
+        Pair(
+            "Chaque fois que je résiste, je gagne.",
+            "في كل مرة أقاوم فيها، أفوز."
+        ),
+        Pair(
+            "Je suis l'observateur, pas la pensée.",
+            "أنا المراقب، لست الفكرة."
+        ),
+        Pair(
+            "Mon cerveau se reconstruit chaque jour, avec ou sans mon attention — alors je choisis d'y faire attention.",
+            "دماغي يعيد بناء نفسه كل يوم، بانتباهي أو بدونه — لذا أختار أن أنتبه."
+        ),
+        Pair(
+            "Cette envie va monter, puis redescendre. Je n'ai rien à faire sauf attendre.",
+            "هذه الرغبة سترتفع ثم تنخفض. لا شيء عليّ فعله سوى الانتظار."
+        ),
+        Pair(
+            "Ce n'est pas moi qui échoue. C'est un vieux chemin qui essaie de survivre.",
+            "لست أنا من يفشل. إنه مسار قديم يحاول البقاء."
+        )
+    )
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = if (lang == "FR") "Affirmations d'urgence dans l'instant 💫" else "توكيدات فورية لحظة الاندفاع 💫",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        items.forEach { pair ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(12.dp))
+                    .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+                    .padding(14.dp)
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (lang == "FR") pair.first else pair.second,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Anthracite,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        lineHeight = 18.sp,
+                        textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = if (lang == "FR") pair.second else pair.first,
+                        fontSize = 10.sp,
+                        color = MediumGray,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        textAlign = if (lang == "AR") TextAlign.Left else TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        GoldGradientButton(
+            text = if (lang == "FR") "Lancer le Surf de l'urgence 🌊" else "بدء ركوب موجة الإلحاح 🌊",
+            onClick = {
+                viewModel.setRecoveryActiveTab("Reconditionnement")
+                onNavigate(5)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("launch_urge_surf")
+        )
+    }
+}
+
+@Composable
+fun SwitchIdeasTab(lang: String, onNavigate: (Int) -> Unit, viewModel: OperationsViewModel) {
+    val ideas = listOf(
+        Triple(
+            "Se lever et marcher 2 minutes 🚶",
+            "النهوض والمشي لمدة دقيقتين 🚶",
+            null
+        ),
+        Triple(
+            "Faire 10 respirations profondes 🌬️",
+            "أخذ 10 أنفاس عميقة ومريحة 🌬️",
+            "Respiration"
+        ),
+        Triple(
+            "Écrire une phrase dans le Journal de victoires ✍️",
+            "كتابة جملة في دفتر الانتصارات اليومي ✍️",
+            "Journal"
+        ),
+        Triple(
+            "Faire une série de Kegel / Reverse Kegel 🏋️",
+            "القيام بجلسة تمارين كيجل أو كيجل العكسي 🏋️",
+            "Kegel"
+        ),
+        Triple(
+            "Appeler/texter quelqu'un de confiance 📞",
+            "الاتصال أو مراسلة شخص تثق به 📞",
+            null
+        ),
+        Triple(
+            "Sortir prendre l'air 5 minutes 🌲",
+            "الخروج لتنشق الهواء النقي لمدة 5 دقائق 🌲",
+            null
+        )
+    )
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White, RoundedCornerShape(12.dp))
+                .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+                .padding(14.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = if (lang == "FR") "Le double effet neurologique du Switch 🔄" else "الأثر العصبي المزدوج لإعادة توجيه الانتباه 🔄",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic,
+                    textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = if (lang == "FR") {
+                        "Rediriger consciemment ton attention n'est pas de la distraction — c'est un double effet neurologique mesurable. En ne complétant pas l'action, tu prives l'ancien circuit de son renforcement habituel. En même temps, l'acte même de rediriger ton attention renforce le circuit d'observation et de contrôle conscient. C'est une compétition physique entre deux réseaux de neurones, et chaque Switch Idea fait pencher la balance."
+                    } else {
+                        "إعادة توجيه انتباهك بوعي كامل ليست مجرد إلهء — بل هي عملية ذات أثر عصبي مزدوج وقابل للقياس. عندما تمتنع عن إكمال السلوك القديم، فإنك تحرم تلك الدارة من تعزيزها المعتاد. وفي الوقت نفسه، فإن فعل إعادة توجيه تركيزك يقوي دارات المراقبة والتحكم الواعي. إنها منافسة فيزيائية حقيقية بين شبكاتك العصبية، وكل فكرة بديلة تميل الكفة لصالحك."
+                    },
+                    fontSize = 12.sp,
+                    color = Anthracite,
+                    lineHeight = 18.sp,
+                    textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Text(
+            text = if (lang == "FR") "Idées d'action concrètes (Switch Ideas) 🎯" else "أفكار عملية وتلقائية لإعادة التوجيه (Switch Ideas) 🎯",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ideas.forEach { idea ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightBeige.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .border(1.dp, LightGrayDivider, RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (lang == "FR") idea.first else idea.second,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite,
+                                textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = if (lang == "FR") idea.second else idea.first,
+                                fontSize = 10.sp,
+                                color = MediumGray,
+                                textAlign = if (lang == "AR") TextAlign.Left else TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        if (idea.third != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.setRecoveryActiveTab(idea.third!!)
+                                    onNavigate(5)
+                                },
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("switch_link_${idea.third}")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = if (lang == "FR") "Lancer" else "ابدأ",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowForward,
+                                        contentDescription = "Go",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SixExpertsTab(lang: String) {
+    var selectedExpert by remember { mutableStateOf<Expert?>(null) }
+
+    val experts = listOf(
+        Expert(
+            name = "Donald Hebb",
+            dates = "22 juillet 1904 – 20 août 1985",
+            domain = if (lang == "FR") "Psychologue canadien (Neurosciences)" else "عالم نفس كندي (العلوم العصبية)",
+            icon = Icons.Outlined.Psychology,
+            summary = "Auteur de 'The Organization of Behavior' (1949), il a posé les bases théoriques de l'apprentissage neuronal moderne — les neurones activés ensemble renforcent leur connexion. Considéré comme le fondateur de la neuroscience computationnelle de l'apprentissage.",
+            metaphor = "Un chemin de terre qui devient autoroute à force d'être emprunté — chaque répétition consciente construit littéralement un nouveau chemin physique dans le cerveau."
+        ),
+        Expert(
+            name = "Wolfram Schultz",
+            dates = "Professeur à Cambridge",
+            domain = if (lang == "FR") "Neuroscientifique de la dopamine" else "عالم أعصاب متخصص في الدوبامين",
+            icon = Icons.Outlined.Psychology,
+            summary = "A découvert par enregistrement direct de neurones dans les années 1990 que la dopamine code l'erreur de prédiction de récompense (la différence entre attente et réalité), pas le plaisir lui-même. Récompensé par le Brain Prize en 2017.",
+            metaphor = "Le cerveau n'est pas une machine à plaisir, c'est une machine à paris et surprises — recalibrer ses attentes recalibre sa satisfaction."
+        ),
+        Expert(
+            name = "Judson Brewer",
+            dates = "Né en 1974",
+            domain = if (lang == "FR") "Psychiatre et Neuroscientifique" else "طبيب نفسي وعالم أعصاب",
+            icon = Icons.Outlined.Psychology,
+            summary = "A démontré par IRMf que la méthode RAIN (Reconnaître, Accepter, Investiguer, Ne-pas-s'identifier) désactive directement les circuits de rumination liés au craving. Auteur de 'The Craving Mind' et 'Unwinding Anxiety'.",
+            metaphor = "Observer une envie comme une vague qui monte, atteint un pic, puis redescend d'elle-même — sans jamais avoir besoin d'y céder."
+        ),
+        Expert(
+            name = "Anna Lembke",
+            dates = "Née le 27 novembre 1967",
+            domain = if (lang == "FR") "Psychiatre & Professeure à Stanford" else "طبيبة نفسية وأستاذة في جامعة ستانفورد",
+            icon = Icons.Outlined.Psychology,
+            summary = "Dans 'Dopamine Nation' (2021), elle démontre que plaisir et douleur sont traités par les mêmes zones cérébrales en balance constante — la sur-stimulation répétée fait pencher durablement cette balance vers le manque, et l'abstinence temporaire volontaire permet de la rééquilibrer.",
+            metaphor = "Une balançoire dans le cerveau — chaque pic de plaisir intense fait redescendre fort de l'autre côté juste après."
+        ),
+        Expert(
+            name = "Michael Merzenich",
+            dates = "Né en 1942",
+            domain = if (lang == "FR") "Neuroscientifique (Neuroplasticité)" else "عالم أعصاب (المرونة العصبية)",
+            icon = Icons.Outlined.Psychology,
+            summary = "A prouvé expérimentalement dès les années 1980-90 que le cerveau adulte reste physiquement modifiable toute la vie, contredisant le dogme antérieur d'un cerveau adulte figé. Auteur de 'Soft-Wired'.",
+            metaphor = "Le cerveau change comme un muscle — mais seulement si l'attention est pleinement engagée pendant la pratique, pas en pilote automatique."
+        ),
+        Expert(
+            name = "Épictète",
+            dates = "vers 50 apr. J.-C. – vers 135 apr. J.-C.",
+            domain = if (lang == "FR") "Philosophe Stoïcien" else "فيلسوف رواقي",
+            icon = Icons.Outlined.AccountBalance,
+            summary = "A formulé la 'dichotomie du contrôle' — séparer ce qui dépend de nous (notre réponse) de ce qui n'en dépend pas (l'apparition d'une pensée ou d'une impulsion). Sa discipline de 'l'assentiment', observer une impression avant de lui donner son accord, préfigure de 2000 ans les techniques modernes de pleine conscience.",
+            metaphor = "Une pensée qui surgit n'est pas un échec — c'est automatique et hors de ton contrôle. Ta réponse, elle, dépend entièrement de toi."
+        )
+    )
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = if (lang == "FR") "6 Experts des Neurosciences & Modèles mentaux 📚" else "6 خبراء في العلوم العصبية والنماذج الفكرية 📚",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            for (row in 0..2) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    for (col in 0..1) {
+                        val index = row * 2 + col
+                        if (index < experts.size) {
+                            val exp = experts[index]
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(Color.White, RoundedCornerShape(12.dp))
+                                    .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+                                    .clickable { selectedExpert = exp }
+                                    .padding(14.dp)
+                                    .testTag("expert_card_$index")
+                            ) {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .background(LightBeige, CircleShape)
+                                            .border(1.dp, GoldClassic.copy(alpha = 0.3f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = exp.icon,
+                                            contentDescription = exp.name,
+                                            tint = GoldClassic,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = exp.name,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Anthracite,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(
+                                            text = exp.dates,
+                                            fontSize = 9.sp,
+                                            color = MediumGray,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(
+                                            text = exp.domain,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = GoldClassic,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        selectedExpert?.let { exp ->
+            androidx.compose.ui.window.Dialog(onDismissRequest = { selectedExpert = null }) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .fillMaxHeight(0.85f),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(LightBeige, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = exp.icon,
+                                        contentDescription = exp.name,
+                                        tint = GoldClassic,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(text = exp.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                                    Text(text = exp.dates, fontSize = 9.sp, color = MediumGray)
+                                }
+                            }
+                            IconButton(
+                                onClick = { selectedExpert = null },
+                                modifier = Modifier.size(28.dp).testTag("close_expert_dialog")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = MediumGray,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (lang == "FR") "Résumé scientifique" else "الملخص العلمي",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic,
+                                textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = exp.summary,
+                                fontSize = 12.sp,
+                                color = Anthracite,
+                                lineHeight = 18.sp,
+                                textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(LightBeige, RoundedCornerShape(10.dp))
+                                .border(1.dp, GoldClassic.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
+                                .padding(12.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = if (lang == "FR") "Métaphore / Image simplifiée 💡" else "مفهوم مبسط / تمثيل مجازي 💡",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFE65100),
+                                    textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    text = exp.metaphor,
+                                    fontSize = 11.sp,
+                                    color = Anthracite,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    lineHeight = 16.sp,
+                                    textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = if (lang == "FR") "🔧 Atelier d'Application Pratique" else "🔧 الورشة التطبيقية للخبير",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            textAlign = if (lang == "AR") TextAlign.Right else TextAlign.Left,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        when (exp.name) {
+                            "Donald Hebb" -> HebbSimulator(lang)
+                            "Wolfram Schultz" -> SchultzSimulator(lang)
+                            "Judson Brewer" -> BrewerSimulator(lang)
+                            "Anna Lembke" -> LembkeSimulator(lang)
+                            "Michael Merzenich" -> MerzenichSimulator(lang)
+                            "Épictète" -> EpictetusSimulator(lang)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HebbSimulator(lang: String) {
+    var synapticStrength by remember { mutableStateOf(0.2f) }
+    val scope = rememberCoroutineScope()
+    val pulseProgress = remember { Animatable(0f) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LightGrayBg, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = if (lang == "FR") "🔬 Simulateur de Plasticité Synaptique" else "🔬 محاكي المرونة المشبكية",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = GoldClassic
+        )
+        
+        Text(
+            text = if (lang == "FR") {
+                "STIMULATION SIMULTANÉE : Activez simultanément les neurones pré et post-synaptiques pour renforcer la gaine de myéline et l'efficacité de la transmission (LTP)."
+            } else {
+                "التحفيز المتزامن: قم بتنشيط الخلايا العصبية قبل وبعد المشبكية في نفس الوقت لتقوية غمد الميالين وكفاءة النقل العصبي."
+            },
+            fontSize = 10.sp,
+            color = MediumGray,
+            textAlign = TextAlign.Center
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp)
+                .background(Color.White, RoundedCornerShape(8.dp))
+                .border(1.dp, LightGrayDivider, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                val neuronARad = 18.dp.toPx()
+                val neuronBRad = 18.dp.toPx()
+                val centerA = Offset(w * 0.2f, h * 0.5f)
+                val centerB = Offset(w * 0.8f, h * 0.5f)
+                
+                val thickness = 2f + (synapticStrength * 16f)
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(GoldClassic.copy(alpha = 0.4f), GoldDeep.copy(alpha = synapticStrength))
+                    ),
+                    start = centerA,
+                    end = centerB,
+                    strokeWidth = thickness,
+                    cap = StrokeCap.Round
+                )
+                
+                drawCircle(
+                    color = GoldClassic,
+                    radius = neuronARad,
+                    center = centerA
+                )
+                
+                drawCircle(
+                    color = if (synapticStrength > 0.6f) GoldDeep else Color.Gray,
+                    radius = neuronBRad,
+                    center = centerB
+                )
+                
+                if (pulseProgress.value > 0f && pulseProgress.value < 1f) {
+                    val currentPos = centerA + (centerB - centerA) * pulseProgress.value
+                    drawCircle(
+                        color = Color.White,
+                        radius = 5.dp.toPx(),
+                        center = currentPos
+                    )
+                    drawCircle(
+                        color = GoldDeep.copy(alpha = 0.8f),
+                        radius = 8.dp.toPx(),
+                        center = currentPos,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
+            }
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = if (lang == "FR") "Neurone A\n(Déclencheur)" else "عصبون أ\n(المثير)",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.width(60.dp)
+                )
+                Text(
+                    text = if (lang == "FR") "Neurone B\n(Action)" else "عصبون ب\n(السلوك)",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.width(60.dp)
+                )
+            }
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (lang == "FR") "Force de la connexion :" else "قوة الرابط العصبي :",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = Anthracite
+            )
+            Text(
+                text = "${(synapticStrength * 100).toInt()}%",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = GoldDeep
+            )
+        }
+        
+        LinearProgressIndicator(
+            progress = { synapticStrength },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp)),
+            color = GoldClassic,
+            trackColor = Color.LightGray.copy(alpha = 0.3f)
+        )
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    scope.launch {
+                        synapticStrength = (synapticStrength + 0.15f).coerceAtMost(1.0f)
+                        pulseProgress.snapTo(0f)
+                        pulseProgress.animateTo(1f, animationSpec = tween(500, easing = FastOutSlowInEasing))
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "⚡ Activer ensemble" else "⚡ تنشيط مشترك",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+            
+            Button(
+                onClick = {
+                    synapticStrength = (synapticStrength - 0.2f).coerceAtLeast(0.1f)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "⏳ Laisser dégrader" else "⏳ ترك الرابط يذبل",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+            }
+        }
+        
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                .padding(8.dp)
+        ) {
+            Text(
+                text = if (lang == "FR") {
+                    "💡 CONSEIL DE DONALD HEBB : L'abstinence n'est pas passive. Chaque fois que l'impulsion s'active mais que vous redirigez votre attention vers un autre choix conscient (Switch), vous privez le vieux chemin A-B de renforcement. Sans co-activation, il s'élague naturellement."
+                } else {
+                    "💡 نصيحة دونالد هيب: الامتناع ليس سلبياً. في كل مرة يتم تنشيط المثير ولكنك تعيد توجيه انتباهك إلى خيار واعٍ آخر (Switch)، فإنك تحرم المسار القديم أ-ب من التعزيز. بدون تفعيل مشترك، فإنه يتقلم طبيعياً."
+                },
+                fontSize = 9.sp,
+                color = Anthracite,
+                lineHeight = 13.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun SchultzSimulator(lang: String) {
+    var expectation by remember { mutableStateOf(5f) }
+    var actualReward by remember { mutableStateOf(5f) }
+    
+    val predictionError = actualReward - expectation
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LightGrayBg, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = if (lang == "FR") "🎯 Balance d'Erreur de Prédiction (RPE)" else "🎯 ميزان خطأ التنبؤ بالمكافأة",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = GoldClassic
+        )
+        
+        Text(
+            text = if (lang == "FR") {
+                "DOPAMINE = Récompense Réelle - Attente.\nAjustez les curseurs pour voir comment votre niveau de dopamine réagit biologiquement."
+            } else {
+                "الدوبامين = المكافأة الفعلية - التوقعات.\nقم بتعديل المؤشرات لترى كيف يتفاعل مستوى الدوبامين لديك عصبياً."
+            },
+            fontSize = 10.sp,
+            color = MediumGray,
+            textAlign = TextAlign.Center
+        )
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = if (lang == "FR") "Attente / Niveau d'excitation espéré :" else "التوقعات / مستوى الإثارة المتوقع :",
+                    fontSize = 10.sp,
+                    color = Anthracite,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = expectation.toInt().toString(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic
+                )
+            }
+            Slider(
+                value = expectation,
+                onValueChange = { expectation = it },
+                valueRange = 0f..10f,
+                colors = SliderDefaults.colors(
+                    activeTrackColor = GoldClassic,
+                    thumbColor = GoldClassic
+                )
+            )
+        }
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = if (lang == "FR") "Récompense Réelle obtenue :" else "المكافأة الفعلية التي تم تلقيها :",
+                    fontSize = 10.sp,
+                    color = Anthracite,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = actualReward.toInt().toString(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+            }
+            Slider(
+                value = actualReward,
+                onValueChange = { actualReward = it },
+                valueRange = 0f..10f,
+                colors = SliderDefaults.colors(
+                    activeTrackColor = Anthracite,
+                    thumbColor = Anthracite
+                )
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White, RoundedCornerShape(10.dp))
+                .border(1.dp, LightGrayDivider, RoundedCornerShape(10.dp))
+                .padding(12.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (lang == "FR") "Erreur de Prédiction de la Dopamine (RPE) :" else "خطأ التنبؤ بالدوبامين (RPE) :",
+                    fontSize = 10.sp,
+                    color = MediumGray
+                )
+                
+                Text(
+                    text = if (predictionError > 0.1f) {
+                        "+${String.format(Locale.US, "%.1f", predictionError)} (SURPRISE POSITIVE! 🚀)"
+                    } else if (predictionError < -0.1f) {
+                        "${String.format(Locale.US, "%.1f", predictionError)} (DOPAMINE CRASH! 📉)"
+                    } else {
+                        "0.0 (NEUTRE / HABITUDE 💤)"
+                    },
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (predictionError > 0.1f) GoldDeep else if (predictionError < -0.1f) Color(0xFFC62828) else Color.Gray
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(20.dp)
+                        .background(LightGrayBg, RoundedCornerShape(6.dp)),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(fraction = ((predictionError + 10f) / 20f).coerceIn(0f, 1f))
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = if (predictionError > 0.1f) {
+                                        listOf(GoldClassic, GoldDeep)
+                                    } else if (predictionError < -0.1f) {
+                                        listOf(Color(0xFFEF9A9A), Color(0xFFC62828))
+                                    } else {
+                                        listOf(Color.LightGray, Color.Gray)
+                                    }
+                                ),
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                    )
+                }
+
+                Text(
+                    text = if (predictionError > 0.1f) {
+                        if (lang == "FR") {
+                            "🔥 Le cerveau libère une énorme décharge de dopamine car l'événement dépasse l'attente. C'est le moteur de l'addiction : la recherche constante de ce pic inattendu."
+                        } else {
+                            "🔥 يطلق الدماغ دفقة ضخمة من الدوبامين لأن الحدث تجاوز التوقعات. هذا هو محرك الإدمان الأساسي: البحث المستمر عن تلك المفاجأة غير المتوقعة."
+                        }
+                    } else if (predictionError < -0.1f) {
+                        if (lang == "FR") {
+                            "📉 Catastrophe dopaminergique ! Vous attendiez beaucoup d'excitation mais la réalité est décevante. Cela crée un vide insoutenable (craving, frustration) qui vous pousse à consommer à nouveau pour compenser."
+                        } else {
+                            "📉 انهيار الدوبامين! كنت تتوقع إثارة عالية لكن الواقع كان مخيباً للآمال. يخلق هذا فجوة حادة (الرغبة الشديدة، الإحباط) تدفعك للتكرار للتعويض."
+                        }
+                    } else {
+                        if (lang == "FR") {
+                            "💤 Routine. Le cerveau a parfaitement anticipé la récompense. Aucune libération surprise de dopamine. L'activité perd sa saveur excitante."
+                        } else {
+                            "💤 رتابة. لقد توقع الدماغ المكافأة تمامًا. لا إفراز مفاجئ للدوبامين. النشاط يفقد بريقه المثير تدريجياً."
+                        }
+                    },
+                    fontSize = 10.sp,
+                    color = Anthracite,
+                    lineHeight = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun BrewerSimulator(lang: String) {
+    var step by remember { mutableStateOf(1) }
+    val check1 = remember { mutableStateOf(false) }
+    val check2 = remember { mutableStateOf(false) }
+    val check3 = remember { mutableStateOf(false) }
+    val check4 = remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LightGrayBg, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = if (lang == "FR") "🌊 Guide de Pleine Conscience RAIN" else "🌊 دليل اليقظة الذهنية والركوب على الموجة (RAIN)",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = GoldClassic
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            listOf("R", "A", "I", "N").forEachIndexed { index, name ->
+                val active = step > index
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(6.dp)
+                        .background(
+                            color = if (active) GoldClassic else Color.LightGray.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(3.dp)
+                        )
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White, RoundedCornerShape(10.dp))
+                .border(1.dp, LightGrayDivider, RoundedCornerShape(10.dp))
+                .padding(12.dp)
+        ) {
+            when (step) {
+                1 -> Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (lang == "FR") "R - RECONNAÎTRE (Recognize) 👀" else "R - التعرف والإدراك (Recognize) 👀",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+                    Text(
+                        text = if (lang == "FR") {
+                            "Dès que l'impulsion surgit, nommez-la consciemment. Dites-vous : 'L'envie est là.' ou 'Ah, voilà un pattern de craving.' Le simple fait de nommer l'émotion désengage l'automatisme inconscient."
+                        } else {
+                            "بمجرد ظهور الاندفاع، حدده وسمّه بوعي. قل لنفسك: 'الرغبة موجودة الآن.' أو 'آه، هذا نمط رغبة يرتفع.' مجرد التسمية يفصلك عن التلقائية اللاشعورية."
+                        },
+                        fontSize = 10.sp,
+                        color = Anthracite,
+                        lineHeight = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Button(
+                        onClick = { step = 2 },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        Text(if (lang == "FR") "Reconnu 👁️" else "تم التعرف 👁️", fontSize = 10.sp, color = Color.White)
+                    }
+                }
+                2 -> Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (lang == "FR") "A - ACCEPTER (Allow) 🧘" else "A - القبول والسماح (Allow) 🧘",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+                    Text(
+                        text = if (lang == "FR") {
+                            "Laissez cette sensation exister. Ne la combattez pas (ce qui l'alimenterait en stress) et ne cédez pas non plus. C'est juste un signal électrique temporaire dans votre tête."
+                        } else {
+                            "اسمح لهذا الشعور بالوجود. لا تحاربه (مما يغذيه بالتوتر) ولا تستسلم له كذلك. إنه مجرد إشارة كهربائية مؤقتة في دماغك."
+                        },
+                        fontSize = 10.sp,
+                        color = Anthracite,
+                        lineHeight = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Button(
+                        onClick = { step = 3 },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        Text(if (lang == "FR") "J'accepte et je respire 🌬️" else "أقبل وأتنفس بعمق 🌬️", fontSize = 10.sp, color = Color.White)
+                    }
+                }
+                3 -> Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.Start,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (lang == "FR") "I - INVESTIGUER (Investigate) 🔎" else "I - الاستكشاف والتقصي (Investigate) 🔎",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                    Text(
+                        text = if (lang == "FR") {
+                            "Explorez votre corps avec curiosité scientifique. Où ressentez-vous l'envie ? Cochez les sensations présentes :"
+                        } else {
+                            "استكشف جسدك بفضول علمي. أين تشعر بالرغبة بالضبط؟ حدد الأحاسيس الجسدية الحالية:"
+                        },
+                        fontSize = 10.sp,
+                        color = Anthracite,
+                        lineHeight = 14.sp,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    listOf(
+                        Pair(check1, if (lang == "FR") "Serrage ou boule dans la gorge/poitrine" else "ضيق أو غصة في الحلق/الصدر"),
+                        Pair(check2, if (lang == "FR") "Tension ou agitation dans les mains/jambes" else "توتر أو تململ في اليدين/الرجلين"),
+                        Pair(check3, if (lang == "FR") "Accélération du rythme cardiaque" else "تسارع نبضات القلب"),
+                        Pair(check4, if (lang == "FR") "Pensée répétitive et obsédante en boucle" else "تفكير متكرر وملح يدور في حلقة مفرغة")
+                    ).forEach { pair ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { pair.first.value = !pair.first.value }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .border(1.dp, GoldClassic, RoundedCornerShape(4.dp))
+                                    .background(
+                                        if (pair.first.value) GoldClassic else Color.Transparent,
+                                        RoundedCornerShape(4.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (pair.first.value) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "checked",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = pair.second, fontSize = 9.sp, color = Anthracite)
+                        }
+                    }
+
+                    Button(
+                        onClick = { step = 4 },
+                        enabled = check1.value || check2.value || check3.value || check4.value,
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .align(Alignment.CenterHorizontally),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        Text(if (lang == "FR") "Exploré avec curiosité 🔎" else "تم الاستكشاف بفضول 🔎", fontSize = 10.sp, color = Color.White)
+                    }
+                }
+                4 -> Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (lang == "FR") "N - NE PAS S'IDENTIFIER (Non-Identify) 🌊" else "N - عدم التماهي / التحرر (Non-Identify) 🌊",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+                    Text(
+                        text = if (lang == "FR") {
+                            "Réalisez que vous êtes l'observateur de l'envie, pas l'envie elle-même. Répétez-vous : 'Je ressens une impulsion, mais je ne suis pas cette impulsion.' Regardez-la redescendre et s'évaporer lentement."
+                        } else {
+                            "أدرك تماماً أنك المراقب لهذه الرغبة، ولست الرغبة نفسها. قل لنفسك: 'أنا أشعر بالاندفاع، لكني لست هذا الاندفاع.' شاهدها وهي تنخفض وتتلاشى ببطء."
+                        },
+                        fontSize = 10.sp,
+                        color = Anthracite,
+                        lineHeight = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Button(
+                        onClick = {
+                            step = 1
+                            check1.value = false
+                            check2.value = false
+                            check3.value = false
+                            check4.value = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldDeep),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        Text(if (lang == "FR") "Libéré, recommencer 🔄" else "حر ومستعد، إعادة المحاولة 🔄", fontSize = 10.sp, color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LembkeSimulator(lang: String) {
+    var stateType by remember { mutableStateOf("neutral") }
+    
+    val rotationAngle by animateFloatAsState(
+        targetValue = when (stateType) {
+            "pleasure" -> -15f
+            "gremlin" -> 18f
+            "pain_effort" -> 12f
+            else -> 0f
+        },
+        animationSpec = tween(1200, easing = FastOutSlowInEasing), label = "SeeSawRotation"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LightGrayBg, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = if (lang == "FR") "⚖️ Balance Plaisir-Douleur" else "⚖️ ميزان اللذة والألم",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = GoldClassic
+        )
+        
+        Text(
+            text = if (lang == "FR") {
+                "Plaisir et douleur sont traités dans la même zone cérébrale. Cliquez pour ajouter des stimuli et voir comment la balance se réajuste biologiquement."
+            } else {
+                "تتم معالجة اللذة والألم في نفس منطقة الدماغ. انقر لإضافة محفزات وشاهد كيف يعيد الميزان ضبط نفسه بيولوجياً."
+            },
+            fontSize = 10.sp,
+            color = MediumGray,
+            textAlign = TextAlign.Center
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(110.dp)
+                .background(Color.White, RoundedCornerShape(8.dp))
+                .border(1.dp, LightGrayDivider, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                val pivotX = w / 2f
+                val pivotY = h * 0.75f
+                
+                val pivotPath = Path().apply {
+                    moveTo(pivotX, pivotY)
+                    lineTo(pivotX - 15.dp.toPx(), h * 0.95f)
+                    lineTo(pivotX + 15.dp.toPx(), h * 0.95f)
+                    close()
+                }
+                drawPath(pivotPath, color = Color.Gray)
+                
+                val boardLength = w * 0.75f
+                
+                rotate(degrees = rotationAngle, pivot = Offset(pivotX, pivotY)) {
+                    drawLine(
+                        color = Anthracite,
+                        start = Offset(pivotX - boardLength / 2f, pivotY),
+                        end = Offset(pivotX + boardLength / 2f, pivotY),
+                        strokeWidth = 6f
+                    )
+                    
+                    drawCircle(
+                        color = GoldClassic,
+                        radius = 8.dp.toPx(),
+                        center = Offset(pivotX - boardLength / 2f, pivotY - 10.dp.toPx())
+                    )
+                    
+                    drawCircle(
+                        color = Color.DarkGray,
+                        radius = 8.dp.toPx(),
+                        center = Offset(pivotX + boardLength / 2f, pivotY - 10.dp.toPx())
+                    )
+                    
+                    if (stateType == "gremlin") {
+                        drawCircle(
+                            color = Color(0xFFC62828),
+                            radius = 12.dp.toPx(),
+                            center = Offset(pivotX + boardLength / 2f, pivotY - 26.dp.toPx())
+                        )
+                    }
+                }
+            }
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = if (lang == "FR") "Plaisir\n(Dopamine)" else "اللذة\n(دوبامين)",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = if (lang == "FR") "Douleur\n(Manque/Effort)" else "الألم\n(نقص/جهد)",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.DarkGray,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    stateType = "pleasure"
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "🍬 Plaisir Facile" else "🍬 متعة سهلة",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Button(
+                onClick = {
+                    stateType = "gremlin"
+                },
+                enabled = stateType == "pleasure",
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "👾 Neuro-Gremlin" else "👾 جني التوازن",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Button(
+                onClick = {
+                    stateType = "pain_effort"
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "🏃 Douleur Saine" else "🏃 ألم صحي (جهد)",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White, RoundedCornerShape(10.dp))
+                .border(1.dp, LightGrayDivider, RoundedCornerShape(10.dp))
+                .padding(12.dp)
+        ) {
+            Text(
+                text = when (stateType) {
+                    "pleasure" -> if (lang == "FR") {
+                        "🍬 PLAISIR DIRECT : Ajouter une dose de plaisir artificiel intense (ex: écrans, pornographie, sucre) fait immédiatement basculer la balance du côté du Plaisir. Le soulagement est instantané, mais de courte durée..."
+                    } else {
+                        "🍬 لذة مباشرة وسريعة: إدخال متعة اصطناعية مكثفة (مثل الشاشات، السلوكيات الإدمانية، السكر) يميل الكفة فوراً نحو اللذة. الارتياح سريع ولحظي، لكنه قصير الأجل..."
+                    }
+                    "gremlin" -> if (lang == "FR") {
+                        "👾 LE GREMLIN DE L'HOMÉOSTASIE : Pour restaurer l'équilibre, votre cerveau envoie des 'gremlins' (mécanismes d'adaptation opposés) sur le côté de la Douleur pour faire pencher la balance de l'autre côté. C'est le crash dopaminergique post-plaisir, créant le manque, l'agitation et l'envie de recommencer."
+                    } else {
+                        "👾 جني التوازن العصبي: لاستعادة التوازن الطبيعي للدماغ، يرسل دماغك 'آليات تعويضية عصبية' (جنود تعويضية) لتقف في جانب الألم لتميل الكفة للجهة المقابلة بقوة. هذا هو الانهيار الدوباميني اللاحق للمتعة السريعة، مسبباً الرغبة الملحة والتململ."
+                    }
+                    "pain_effort" -> if (lang == "FR") {
+                        "🏃 DOULEUR SAINE & EFFORT : En faisant un effort volontaire (méditation, sport, douche froide, lecture, abstinence), vous faites pencher la balance vers la Douleur/Effort. En réponse, le cerveau compense en ajoutant du plaisir naturel pour restaurer l'équilibre, augmentant durablement votre niveau de dopamine de base !"
+                    } else {
+                        "🏃 الألم الصحي والجهد الاختياري: عند بذل جهد واعٍ (تمارين كيجل، تأمل، رياضة، حمام بارد، امتناع)، يميل ميزانك نحو الألم/الجهد. كاستجابة تعويضية، يقوم الدماغ بإضافة اللذة الطبيعية ليعيد ضبط التوازن، مما يرفع مستوى الدوبامين الأساسي لديك لفترة طويلة وبشكل مستقر!"
+                    }
+                    else -> if (lang == "FR") {
+                        "⚖️ ÉTAT NEUTRE : La balance est en équilibre instable. Cliquez sur 'Plaisir Facile' pour simuler une décharge rapide, ou sur 'Douleur Saine' pour voir comment un effort conscient reconstruit votre bien-être."
+                    } else {
+                        "⚖️ الحالة الطبيعية المتوازنة: الميزان في حالة تعادل مستقر. انقر على 'متعة سهلة' لمحاكاة دفق سريع، أو على 'ألم صحي' لترى كيف يعيد الجهد الواعي بناء صحتك العصبية."
+                    }
+                },
+                fontSize = 10.sp,
+                color = Anthracite,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun MerzenichSimulator(lang: String) {
+    var randomNumber by remember { mutableStateOf((1..9).random()) }
+    var score by remember { mutableStateOf(0) }
+    var totalAttempts by remember { mutableStateOf(0) }
+    var gameFeedback by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(900)
+            randomNumber = (1..9).random()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LightGrayBg, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = if (lang == "FR") "⚡ Entraîneur d'Attention Active" else "⚡ ممرن الانتباه الواعي الفعال",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = GoldClassic
+        )
+        
+        Text(
+            text = if (lang == "FR") {
+                "SANS ATTENTION, PAS DE MERVEILLE : Merzenich a prouvé que la neuroplasticité ne s'active QUE si vous êtes pleinement engagé. Cliquez sur le bouton d'action UNIQUEMENT lorsque le chiffre 7 apparaît !"
+            } else {
+                "بدون انتباه، لا توجد مرونة عصبية: أثبت ميرزنيخ أن المرونة لا تنشط إلا إذا كنت منتبهاً بالكامل. اضغط على الزر فقط عندما يظهر الرقم 7 على الشاشة!"
+            },
+            fontSize = 10.sp,
+            color = MediumGray,
+            textAlign = TextAlign.Center
+        )
+
+        Box(
+            modifier = Modifier
+                .size(70.dp)
+                .background(Color.White, CircleShape)
+                .border(2.dp, if (randomNumber == 7) GoldClassic else Color.LightGray, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = randomNumber.toString(),
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (randomNumber == 7) GoldClassic else Anthracite
+            )
+        }
+
+        Button(
+            onClick = {
+                totalAttempts++
+                if (randomNumber == 7) {
+                    score++
+                    gameFeedback = if (lang == "FR") {
+                        "🔥 ATTENTION ACTIVE ! Acétylcholine libérée. Les synapses s'ajustent physiquement !"
+                    } else {
+                        "🔥 انتباه نشط! تم إطلاق الأستيل كولين. الروابط العصبية تتعدل فيزيائياً!"
+                    }
+                } else {
+                    gameFeedback = if (lang == "FR") {
+                        "❌ PILOTE AUTOMATIQUE. Pas d'attention focalisée. Aucune plasticité générée."
+                    } else {
+                        "❌ القيادة التلقائية. لا يوجد تركيز بؤري. لم يتم تحفيز أي مرونة عصبية."
+                    }
+                }
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth().height(40.dp)
+        ) {
+            Text(
+                text = if (lang == "FR") "⚡ Capturer l'Instant (Cliquer sur 7) !" else "⚡ اقتنص اللحظة (اضغط عند ظهور 7) !",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = if (lang == "FR") "Synapses Reprogrammées :" else "الروابط المشبكية المعاد برمجتها :",
+                fontSize = 10.sp,
+                color = Anthracite
+            )
+            Text(
+                text = "$score / $totalAttempts",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = GoldClassic
+            )
+        }
+
+        if (gameFeedback.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(8.dp))
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = gameFeedback,
+                    fontSize = 9.sp,
+                    color = if (gameFeedback.startsWith("🔥")) GoldDeep else Color(0xFFC62828),
+                    lineHeight = 13.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EpictetusSimulator(lang: String) {
+    val items = listOf(
+        Triple(
+            "L'apparition soudaine d'une pensée ou d'une envie d'agir.",
+            "الظهور المفاجئ لفكرة ملحة أو رغبة شديدة في التصرف.",
+            false
+        ),
+        Triple(
+            "Ma décision de respirer profondément et de faire un 'Switch'.",
+            "قراري بأخذ نفس عميق والقيام بعملية تحويل الانتباه (Switch).",
+            true
+        ),
+        Triple(
+            "Le fait d'avoir rechuté ou cédé par le passé.",
+            "وقوعي في الانتكاسة أو استسلامي للرغبة في الماضي.",
+            false
+        ),
+        Triple(
+            "Donner mon assentiment ou dire 'Oui' à la pensée intrusive.",
+            "موافقتي العقلية أو قول 'نعم' للفكرة المقتحمة والاستسلام لها.",
+            true
+        ),
+        Triple(
+            "La fatigue physique ou le stress généré par ma journée.",
+            "التعب الجسدي أو الإرهاق المتراكم من ساعات عملي.",
+            false
+        )
+    )
+
+    var currentIndex by remember { mutableStateOf(0) }
+    var selectedAnswer by remember { mutableStateOf<Boolean?>(null) }
+    var explanationText by remember { mutableStateOf("") }
+    
+    val currentItem = items[currentIndex]
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LightGrayBg, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = if (lang == "FR") "🏛️ Le Filtre de la Dichotomie du Contrôle" else "🏛️ فلتر ثنائية التحكم",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = GoldClassic
+        )
+        
+        Text(
+            text = if (lang == "FR") currentItem.first else currentItem.second,
+            fontSize = 12.sp,
+            color = Anthracite,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    selectedAnswer = true
+                    explanationText = if (lang == "FR") {
+                        if (currentItem.third) "✅ Correct ! C'est votre choix conscient, pleinement sous votre contrôle."
+                        else "❌ Incorrect. Ceci est un événement externe ou une pensée automatique involontaire, hors de votre contrôle direct."
+                    } else {
+                        if (currentItem.third) "✅ صحيح! هذا اختيارك الواعي، تحت سيطرتك الكاملة."
+                        else "❌ غير صحيح. هذا حدث خارجي أو فكرة تلقائية لا إرادية، خارجة عن سيطرتك المباشرة."
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selectedAnswer == true) GoldClassic else Color.White
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, GoldClassic),
+                modifier = Modifier.weight(1f).height(38.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "Sous mon contrôle" else "تحت سيطرتي",
+                    color = if (selectedAnswer == true) Color.White else GoldClassic,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Button(
+                onClick = {
+                    selectedAnswer = false
+                    explanationText = if (lang == "FR") {
+                        if (!currentItem.third) "✅ Correct ! Ceci est hors de votre contrôle direct. Vous ne devez pas gaspiller d'énergie dessus."
+                        else "❌ Incorrect. C'est votre décision consciente, elle est pleinement sous votre contrôle."
+                    } else {
+                        if (!currentItem.third) "✅ صحيح! هذا خارج عن سيطرتك المباشرة. لا يجب أن تهدر طاقتك عليه."
+                        else "❌ غير صحيح. هذا قرارك الواعي، وهو تحت سيطرتك الكاملة."
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selectedAnswer == false) GoldClassic else Color.White
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, GoldClassic),
+                modifier = Modifier.weight(1f).height(38.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "Hors contrôle" else "خارج سيطرتي",
+                    color = if (selectedAnswer == false) Color.White else GoldClassic,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        if (explanationText.isNotEmpty()) {
+            Text(
+                text = explanationText,
+                fontSize = 10.sp,
+                color = MediumGray,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+            
+            Button(
+                onClick = {
+                    selectedAnswer = null
+                    explanationText = ""
+                    currentIndex = (currentIndex + 1) % items.size
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Anthracite),
+                modifier = Modifier.fillMaxWidth().height(36.dp)
+            ) {
+                Text(
+                    text = if (lang == "FR") "Suivant" else "التالي",
+                    color = Color.White,
+                    fontSize = 10.sp
+                )
+            }
+        }
+    }
+}
+
+data class LeadershipDiagnosticQuestion(
+    val title: String,
+    val scenario: String,
+    val options: List<String>,
+    val feedbacks: List<String>,
+    val profiles: List<String> // "NICE", "CHEF", "ABSENT", "GOOD"
+)
+
+data class LeadershipSbiTemplate(
+    val title: String,
+    val situation: String,
+    val behavior: String,
+    val impact: String,
+    val request: String
+)
+
+data class ChantierScenario(
+    val title: String,
+    val situation: String,
+    val options: List<String>,
+    val scores: List<Pair<Int, Int>>, // Pair(Warmth, Competence)
+    val explanation: String
+)
+
+@Composable
+fun LeadershipPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Unit) {
+    var activeTab by remember { mutableStateOf("Good Man vs Nice Man") }
+
+    val tabs = listOf(
+        "Good Man vs Nice Man",
+        "Aura & Respect",
+        "Gestion de Chantier",
+        "MOSSAD LEVEL"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            PageHeader(
+                title = "Leadership",
+                subtitle = "Management d'équipe professionnel et gestion de chantiers"
+            )
+
+            // Horizontal Tab Selector styled with sunset indicator
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .background(LightGrayBg, RoundedCornerShape(12.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                tabs.forEach { tab ->
+                    val isSel = activeTab == tab
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                brush = if (isSel) GradientTokens.sunsetHorizontal else SolidColor(Color.Transparent),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable { activeTab = tab }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = tab,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSel) Color.White else MediumGray
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            when (activeTab) {
+                "Good Man vs Nice Man" -> TabGoodManVsNiceMan()
+                "Aura & Respect" -> TabAuraAndRespect(onNavigateToPage)
+                "Gestion de Chantier" -> TabGestionDeChantier()
+                "MOSSAD LEVEL" -> TabMossadLevel()
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+fun TabGoodManVsNiceMan() {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Section 1: Accordéon "Le modèle Chaleur/Compétence"
+        var isChaleurExpanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isChaleurExpanded = !isChaleurExpanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Le modèle Chaleur/Compétence (Science Sociale)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (isChaleurExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                if (isChaleurExpanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Selon les travaux scientifiques de Susan Fiske et Amy Cuddy (Université Harvard), tout individu face à une figure d'autorité pose inconsciemment deux questions pour évaluer son statut :\n" +
+                                "1. Quelles sont ses intentions à mon égard ? (Chaleur / Warmth - Intention)\n" +
+                                "2. Est-il capable d'exécuter ses intentions ? (Compétence / Competence - Capacité)\n\n" +
+                                "La combinaison optimale est la double haute valeur (Chaleur + Compétence), qui suscite l'admiration, la loyauté absolue et la confiance active des équipes.",
+                        fontSize = 12.sp,
+                        color = MediumGray,
+                        lineHeight = 17.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BulletPoint(
+                            boldText = "Petit Chef (Compétence haute / Chaleur basse)",
+                            normalText = "Suscitation de peur et d'évitement. Le personnel fait le strict minimum syndical."
+                        )
+                        BulletPoint(
+                            boldText = "Nice Man (Chaleur haute / Compétence basse)",
+                            normalText = "Suscitation de sympathie mais mépris professionnel. Les consignes de sécurité et de délais sont ignorées car le leader veut plaire."
+                        )
+                        BulletPoint(
+                            boldText = "Leader Absent (Basse Chaleur / Basse Compétence)",
+                            normalText = "Indifférence et débandade de l'équipe."
+                        )
+                        BulletPoint(
+                            boldText = "Good Man (Haute Chaleur / Haute Compétence) ✨",
+                            normalText = "Respect absolu, autorité saine et engagement infaillible de l'équipe."
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section 2: Questionnaire Diagnostic Interactif
+        Text(
+            text = "Test de Leadership : Êtes-vous Nice Man, Petit Chef ou Good Man ?",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        val questions = remember {
+            listOf<LeadershipDiagnosticQuestion>(
+                LeadershipDiagnosticQuestion(
+                    title = "1. Un technicien qualifié fait une erreur répétée",
+                    scenario = "Un maçon très expérimenté oublie pour la deuxième fois de vibrer le béton sur une poutre critique.",
+                    options = listOf(
+                        "Vous ne dites rien pour éviter de créer de la tension ou de le vexer.",
+                        "Vous l'engueulez devant tout le monde sur le chantier : « Tu fais de la merde ! ».",
+                        "Vous ignorez la situation, le béton finira bien par sécher.",
+                        "Vous l'appelez de côté, lui montrez la poutre en expliquant le risque d'Eurocode 2, puis déterminez ensemble comment éviter cet oubli."
+                    ),
+                    feedbacks = listOf(
+                        "Nice Man : Vous privilégiez le confort immédiat au détriment de la qualité technique.",
+                        "Petit Chef : Vous cherchez à l'humilier, brisant sa motivation et l'esprit d'équipe.",
+                        "Absent : Vous fuyez vos responsabilités de contrôle technique.",
+                        "Good Man : Recadrage factuel et constructif, préservant le respect mutuel."
+                    ),
+                    profiles = listOf("NICE", "CHEF", "ABSENT", "GOOD")
+                ),
+                LeadershipDiagnosticQuestion(
+                    title = "2. Livraison majeure retardée",
+                    scenario = "Le fournisseur de béton annonce 1h30 de retard, menaçant de faire déborder les horaires de coulage.",
+                    options = listOf(
+                        "Vous vous excusez platement auprès des hommes en leur demandant s'ils acceptent gentiment de rester.",
+                        "Vous leur criez dessus : « Personne ne rentre chez soi tant que ce n'est pas coulé, c'est comme ça ! ».",
+                        "Vous fermez votre bureau de chantier à 17h et les laissez gérer le camion arrivant.",
+                        "Vous réunissez l'équipe, expliquez l'impact technique du retard, restez avec eux sur le terrain et assurez les heures sup et primes."
+                    ),
+                    feedbacks = listOf(
+                        "Nice Man : Vous suppliez au lieu de diriger.",
+                        "Petit Chef : Autoritarisme aveugle sans considération humaine.",
+                        "Absent : Désertion totale face à la crise.",
+                        "Good Man : Management solidaire et responsable. Exemplarité absolue."
+                    ),
+                    profiles = listOf("NICE", "CHEF", "ABSENT", "GOOD")
+                ),
+                LeadershipDiagnosticQuestion(
+                    title = "3. Un sous-traitant conteste une non-conformité",
+                    scenario = "Le plombier refuse de reprendre un tuyau mal posé et affirme que vous chipotez.",
+                    options = listOf(
+                        "Vous acceptez son travail bâclé pour ne pas retarder le reste du chantier.",
+                        "Vous menacez de le frapper ou de le chasser immédiatement du chantier physique.",
+                        "Vous attendez que le contrôleur passe dans 2 semaines pour trancher à votre place.",
+                        "Vous sortez calmement le cahier des charges et la norme DTU, prenez des mesures précises devant lui et suspendez ses acomptes."
+                    ),
+                    feedbacks = listOf(
+                        "Nice Man : Soumission à l'agressivité d'un tiers.",
+                        "Petit Chef : Violence inutile qui décrédibilise votre professionnalisme.",
+                        "Absent : Manque d'assurance et fuite du conflit.",
+                        "Good Man : Autorité calme basée sur les faits et les normes opposables."
+                    ),
+                    profiles = listOf("NICE", "CHEF", "ABSENT", "GOOD")
+                ),
+                LeadershipDiagnosticQuestion(
+                    title = "4. Attitude lors d'un briefing sécurité (Pre-start)",
+                    scenario = "L'équipe est distraite et rigole pendant la lecture des consignes.",
+                    options = listOf(
+                        "Vous riez avec eux et laissez tomber les consignes de sécurité.",
+                        "Vous les menacez de sanctions disciplinaires immédiates sans chercher de dialogue.",
+                        "Vous lisez le papier dans votre coin le nez baissé sans vous soucier de leur écoute.",
+                        "Vous vous arrêtez de parler, fixez l'élément perturbateur en silence, puis reprenez sur un cas d'accident réel lié au sujet."
+                    ),
+                    feedbacks = listOf(
+                        "Nice Man : La sécurité est sacrifiée pour être aimé de tous.",
+                        "Petit Chef : Réaction impulsive basée sur la peur.",
+                        "Absent : Animation fantôme sans présence réelle.",
+                        "Good Man : Utilisation du silence lourd et recadrage ciblé basé sur la valeur humaine de la sécurité."
+                    ),
+                    profiles = listOf("NICE", "CHEF", "ABSENT", "GOOD")
+                ),
+                LeadershipDiagnosticQuestion(
+                    title = "5. Un collaborateur performant mais arrogant",
+                    scenario = "Votre meilleur conducteur d'engins refuse de remplir ses rapports journaliers d'activité.",
+                    options = listOf(
+                        "Vous l'en excusez car c'est un as du levage.",
+                        "Vous le menacez de licenciement immédiat sans considération pour sa rareté sur le marché.",
+                        "Vous remplissez vous-même ses rapports le soir en cachette.",
+                        "Vous lui expliquez calmement que la précision administrative valide son exploit sur le terrain et que la règle est uniforme."
+                    ),
+                    feedbacks = listOf(
+                        "Nice Man : Vous tolérez l'insubordination par peur de le perdre.",
+                        "Petit Chef : Vous risquez de casser l'outil de production par orgueil personnel.",
+                        "Absent : Vous travaillez à sa place au lieu de le manager.",
+                        "Good Man : Traitement équitable, refus du traitement de faveur, communication valorisante."
+                    ),
+                    profiles = listOf("NICE", "CHEF", "ABSENT", "GOOD")
+                )
+            )
+        }
+
+        var currentDiagIndex by remember { mutableStateOf(0) }
+        var selectedDiagOption by remember { mutableStateOf(-1) }
+        val diagScores = remember { mutableStateListOf<String>() } // To track choices
+        var showDiagResults by remember { mutableStateOf(false) }
+
+        if (!showDiagResults) {
+            val q = questions[currentDiagIndex]
+            OperationsCard(borderAccent = true) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = q.title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic
+                        )
+                        Text(
+                            text = "Question ${currentDiagIndex + 1}/${questions.size}",
+                            fontSize = 11.sp,
+                            color = MediumGray
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = q.scenario,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Anthracite,
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    q.options.forEachIndexed { idx, option ->
+                        val isSelected = selectedDiagOption == idx
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .background(
+                                    if (isSelected) LightBeige else LightGrayBg,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) GoldClassic else Color.Transparent,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable { selectedDiagOption = idx }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { selectedDiagOption = idx },
+                                colors = RadioButtonDefaults.colors(selectedColor = GoldClassic)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = option,
+                                fontSize = 12.sp,
+                                color = Anthracite,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Button(
+                            onClick = {
+                                if (selectedDiagOption != -1) {
+                                    diagScores.add(q.profiles[selectedDiagOption])
+                                    if (currentDiagIndex < questions.size - 1) {
+                                        currentDiagIndex++
+                                        selectedDiagOption = -1
+                                    } else {
+                                        showDiagResults = true
+                                    }
+                                }
+                            },
+                            enabled = selectedDiagOption != -1,
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldClassic)
+                        ) {
+                            Text(
+                                text = if (currentDiagIndex == questions.size - 1) "Terminer" else "Suivant",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Compute scores
+            val goodCount = diagScores.count { it == "GOOD" }
+            val niceCount = diagScores.count { it == "NICE" }
+            val chefCount = diagScores.count { it == "CHEF" }
+            val absentCount = diagScores.count { it == "ABSENT" }
+
+            val dominantProfile = when {
+                goodCount >= 3 -> "GOOD"
+                niceCount >= 2 && niceCount >= chefCount -> "NICE"
+                chefCount >= 2 && chefCount >= niceCount -> "CHEF"
+                else -> "ABSENT"
+            }
+
+            OperationsCard(borderAccent = true) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "VOTRE DIAGNOSTIC LEADERSHIP",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+
+                    val profileTitle = when (dominantProfile) {
+                        "GOOD" -> "✨ GOOD MAN (Le Leader Naturel d'Aura)"
+                        "NICE" -> "🥺 NICE MAN (Le Manager Trop Gentil)"
+                        "CHEF" -> "😡 PETIT CHEF (L'Autoritaire Réactif)"
+                        else -> "🌫️ LEADER ABSENT (L'Éviteur de Conflits)"
+                    }
+
+                    val profileDesc = when (dominantProfile) {
+                        "GOOD" -> "Félicitations. Vous appliquez la science du leadership moderne : combinant fermeté incontournable et respect inaltérable des hommes. Vos équipes travaillent dur parce qu'elles vous respectent, pas parce qu'elles vous craignent."
+                        "NICE" -> "Vous fuyez le conflit par désir d'être aimé. Conséquence : vos équipes vous apprécient mais ignorent vos consignes de sécurité ou de délais car elles savent que vous ne sévirez pas. Vous devez apprendre la fermeté tranquille."
+                        "CHEF" -> "Vous gérez par la peur et la domination verbale. C'est inefficace à moyen terme : vos hommes sabotent le travail en douce ou quittent le chantier. Vous manquez de Chaleur, l'axe clé de la fidélisation."
+                        else -> "Vous subissez le chantier au lieu de le mener. Vous fuyez les problèmes en espérant qu'ils se règlent seuls. Il est urgent d'adopter une posture engagée."
+                    }
+
+                    Text(
+                        text = profileTitle,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+
+                    Text(
+                        text = profileDesc,
+                        fontSize = 12.sp,
+                        color = MediumGray,
+                        lineHeight = 17.sp
+                    )
+
+                    // Diagnostic Breakdown Charts
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(text = "Détails de vos réponses :", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        ProgressBarDiagnostic("Good Man (Autorité / Respect)", goodCount, 5)
+                        ProgressBarDiagnostic("Nice Man (Gentillesse / Évitement)", niceCount, 5)
+                        ProgressBarDiagnostic("Petit Chef (Domination / Colère)", chefCount, 5)
+                        ProgressBarDiagnostic("Leader Absent (Négligence)", absentCount, 5)
+                    }
+
+                    Button(
+                        onClick = {
+                            currentDiagIndex = 0
+                            selectedDiagOption = -1
+                            diagScores.clear()
+                            showDiagResults = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Anthracite),
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text("Recommencer le Test", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        // Section 3: SBI-R Generator
+        Text(
+            text = "Générateur de Script SBI-R (Situation-Comportement-Impact-Requête)",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        val sbiScenarios = listOf(
+            LeadershipSbiTemplate(
+                title = "Retard récurrent au briefing matinal",
+                situation = "Ce matin à 8h pile, lors du rassemblement d'équipe dans l'algeco,",
+                behavior = "tu es arrivé avec 15 minutes de retard pour la troisième fois de la semaine,",
+                impact = "l'impact est que nous avons dû retarder la distribution des consignes de sécurité et le démarrage de la grue, pénalisant tout le reste de l'équipe qui attendait sous la pluie.",
+                request = "Je te demande d'être présent à 7h55 pour qu'on démarre à l'heure exacte. Si tu as un problème de transport, appelle-moi avant 7h45. Sommes-nous d'accord ?"
+            ),
+            LeadershipSbiTemplate(
+                title = "Non-port du harnais de sécurité",
+                situation = "Il y a dix minutes sur le derrick du coffrage de rive,",
+                behavior = "tu travaillais à 4 mètres du vide sans ton harnais de sécurité attaché à la ligne de vie,",
+                impact = "l'impact est que tu risques une chute mortelle instantanée. De plus, les apprentis te voient et imitent cette infraction grave, ce qui m'expose pénalement et menace ta propre vie.",
+                request = "Enfile et connecte ton harnais immédiatement. Au prochain manquement de sécurité de cette nature, je t'exclus définitivement de ce chantier. C'est non négociable."
+            ),
+            LeadershipSbiTemplate(
+                title = "Travail de soudure mal nettoyé",
+                situation = "Lors de mon inspection de fin de poste sur les structures d'acier,",
+                behavior = "tu as laissé les scories et les éclats de soudure sans aucun meulage de finition,",
+                impact = "l'impact est que le contrôleur technique va refuser le raccordement demain matin, entraînant une amende de retard de 4000 € et endommageant notre relation commerciale.",
+                request = "Je te demande de reprendre la meuleuse maintenant et de nettoyer l'ensemble des assemblages avant de quitter le chantier ce soir. Je viens valider à 17h30."
+            ),
+            LeadershipSbiTemplate(
+                title = "Arrogance et contestation publique",
+                situation = "Tout à l'heure à midi devant l'ensemble des sous-traitants dans la zone de pause,",
+                behavior = "tu as haussé le ton en criant que mes plans d'exécution étaient stupides et impossibles,",
+                impact = "l'impact est que tu sapes la confiance des équipes et l'autorité globale de la maîtrise d'œuvre, propageant un climat d'insubordination collective délétère.",
+                request = "Je respecte ton expérience technique. Si tu vois une anomalie, tu viens m'en parler calmement en tête-à-tête dans mon bureau de chantier. Les éclats publics sont exclus."
+            )
+        )
+
+        var selectedSbiIndex by remember { mutableStateOf(0) }
+        val sbi = sbiScenarios[selectedSbiIndex]
+
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Choisissez une situation typique de chantier :",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+
+                // Selectors
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    sbiScenarios.forEachIndexed { idx, item ->
+                        val isSel = selectedSbiIndex == idx
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (isSel) GoldClassic else LightGrayBg,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .clickable { selectedSbiIndex = idx }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = item.title,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSel) Color.White else Anthracite
+                            )
+                        }
+                    }
+                }
+
+                Divider(color = LightGrayDivider)
+
+                Text(
+                    text = "SCRIPT COMPLET SÉCURISÉ & INDESTRUCTIBLE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic
+                )
+
+                Column(
+                    modifier = Modifier
+                        .background(LightBeige, RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SbiSegment("SITUATION (Faits de lieu & temps incontestables)", sbi.situation, GoldClassic)
+                    SbiSegment("COMPORTEMENT (Observation physique uniquement, zéro jugement)", sbi.behavior, Anthracite)
+                    SbiSegment("IMPACT (Conséquences réelles sur la sécurité ou le pognon)", sbi.impact, Color.Red.copy(alpha = 0.8f))
+                    SbiSegment("REQUÊTE (Consigne nette, mesurable et non négociable)", sbi.request, Color(0xFF2E7D32))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProgressBarDiagnostic(label: String, count: Int, total: Int) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = label, fontSize = 10.sp, color = Anthracite)
+            Text(text = "$count/$total", fontSize = 10.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(2.dp))
+        LinearProgressIndicator(
+            progress = count.toFloat() / total,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(CircleShape),
+            color = if (label.startsWith("Good")) GoldClassic else MediumGray,
+            trackColor = LightGrayBg
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+    }
+}
+
+@Composable
+fun SbiSegment(label: String, text: String, color: Color) {
+    Column {
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            color = Anthracite,
+            lineHeight = 15.sp,
+            fontStyle = FontStyle.Italic
+        )
+    }
+}
+
+@Composable
+fun TabAuraAndRespect(onNavigateToPage: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Section 1: Fondements scientifiques de l'Aura
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "La Science de l'Aura : Executive Presence",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Text(
+                    text = "L'aura n'est pas un don inné magique. C'est l'application rigoureuse de la théorie de l'esprit (Premack & Woodruff) et du phénomène biologique de la contagion émotionnelle (Sigal Barsade, Université de Wharton). " +
+                            "Les neurones miroirs de votre équipe scannent continuellement votre physiologie pour calquer leur niveau de panique ou de confiance sur le vôtre.\n\n" +
+                            "Si vous êtes tendu, agité ou parlez vite, vous provoquez un piratage de l'amygdale chez les autres. Si vous êtes physiologiquement calme et parlez lentement, l'équipe s'aligne et se calme.",
+                    fontSize = 12.sp,
+                    color = MediumGray,
+                    lineHeight = 17.sp
+                )
+            }
+        }
+
+        // Section 2: Les Protocoles Physiques
+        Text(
+            text = "Les 4 Protocoles Physiques Incontestables",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        val protocols = listOf(
+            Triple(
+                "Le Protocole du Silence (La règle des 2 secondes)",
+                "Ne répondez jamais instantanément à une question agressive ou complexe. Marquez un arrêt total de 2 secondes en maintenant un regard neutre. Ce silence signale que vous contrôlez vos émotions, fait monter le statut perçu, et force l'autre à écouter votre réponse.",
+                "⏳ Calme l'amygdale"
+            ),
+            Triple(
+                "La Resonante Diaphragmatique (Acoustique)",
+                "Parlez depuis votre ventre (diaphragme), jamais depuis la gorge. Évitez absolument le ton interrogatif à la fin des phrases affirmatives (uptalk). Chaque phrase doit se terminer sur une note basse descendante pour sceller l'autorité.",
+                "🗣️ Voix de poitrine"
+            ),
+            Triple(
+                "L'Oculaire Triangulaire (Winston Churchill)",
+                "Ne fuyez jamais le regard (soumission) et ne fixez pas l'autre continuellement (défi de combat). Adoptez le regard triangulaire de pouvoir : fixez l'œil gauche de l'interlocuteur pendant 3 secondes, puis l'œil droit, puis le centre de son front. C'est l'ancrage de la domination tranquille.",
+                "👁️ Focus Churchill"
+            ),
+            Triple(
+                "La Stabilité Posturale (Zéro Gesticulation)",
+                "Gardez vos pieds ancrés parallèlement à largeur d'épaules, les mains ouvertes et calmes. Éliminez tous les micro-mouvements de décharge de stress (se toucher le visage, trifouiller un stylo, tapoter le pied). Moins vous bougez de manière désordonnée, plus votre autorité perçue est grande.",
+                "🛡️ Ancrage au sol"
+            )
+        )
+
+        protocols.forEach { (title, desc, tag) ->
+            var isExp by remember { mutableStateOf(false) }
+            OperationsCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isExp = !isExp }
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .background(LightBeige, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(text = tag, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                        }
+                    }
+                    if (isExp) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = desc,
+                            fontSize = 11.sp,
+                            color = MediumGray,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section 3: Checklist interactive d'Aura quotidienne
+        Text(
+            text = "Audit Quotidien d'Aura (Auto-évaluation physique)",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        val checklistItems = remember {
+            mutableStateListOf(
+                Pair("J'ai marqué 2 secondes de silence avant chaque prise de décision difficile.", false),
+                Pair("J'ai maintenu ma voix basse en évitant de monter dans les aigus.", false),
+                Pair("J'ai ancré mon regard sans fuir devant les regards hostiles ou sceptiques.", false),
+                Pair("Mes épaules et mon buste étaient ouverts et mes pieds bien campés au sol.", false),
+                Pair("J'ai éliminé tout tic de manipulation (stylo, frottement de mains, portable).", false),
+                Pair("J'ai dit « non » calmement et sans me confondre en justifications excessives.", false),
+                Pair("J'ai absorbé la panique ambiante en affichant un visage neutre et stable.", false),
+                Pair("J'ai formulé un feed-back SBI-R précis sans aucune attaque sur la personne.", false)
+            )
+        }
+
+        val checkedCount = checklistItems.count { it.second }
+
+        OperationsCard(borderAccent = true) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "AURA DE LEADERSHIP : $checkedCount/${checklistItems.size} PILIERS",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldClassic
+                )
+
+                LinearProgressIndicator(
+                    progress = checkedCount.toFloat() / checklistItems.size,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(CircleShape),
+                    color = GoldClassic,
+                    trackColor = LightGrayBg
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                checklistItems.forEachIndexed { index, (label, checked) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                checklistItems[index] = Pair(label, !checked)
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = {
+                                checklistItems[index] = Pair(label, !checked)
+                            },
+                            colors = CheckboxDefaults.colors(checkedColor = GoldClassic)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            color = if (checked) Anthracite else MediumGray,
+                            fontWeight = if (checked) FontWeight.Medium else FontWeight.Normal,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TabGestionDeChantier() {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Section 1: Hersey-Blanchard Situational Calculator
+        OperationsCard {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Calculateur de Délégation Situationnelle",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+                Text(
+                    text = "Selon le modèle de Paul Hersey & Ken Blanchard, le micro-management détruit les experts, tandis que l'absence de directives noie les débutants. Choisissez le profil de votre ouvrier pour obtenir la méthode d'animation optimale.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 15.sp
+                )
+
+                var workerExp by remember { mutableStateOf("Débutant") } // Débutant, Intermédiaire, Expérimenté, Expert
+                var taskComp by remember { mutableStateOf("Simple") } // Simple, Complexe
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Expérience ouvrier :", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        listOf("Débutant", "Intermédiaire", "Expérimenté", "Expert").forEach { level ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                                    .background(if (workerExp == level) LightBeige else LightGrayBg, RoundedCornerShape(4.dp))
+                                    .clickable { workerExp = level }
+                                    .padding(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = workerExp == level, onClick = { workerExp = level }, colors = RadioButtonDefaults.colors(selectedColor = GoldClassic))
+                                Text(level, fontSize = 10.sp, color = Anthracite)
+                            }
+                        }
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Complexité tâche :", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        listOf("Simple", "Complexe").forEach { comp ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                                    .background(if (taskComp == comp) LightBeige else LightGrayBg, RoundedCornerShape(4.dp))
+                                    .clickable { taskComp = comp }
+                                    .padding(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = taskComp == comp, onClick = { taskComp = comp }, colors = RadioButtonDefaults.colors(selectedColor = GoldClassic))
+                                Text(comp, fontSize = 10.sp, color = Anthracite)
+                            }
+                        }
+                    }
+                }
+
+                Divider(color = LightGrayDivider)
+
+                // Computed Output
+                val styleName = when {
+                    workerExp == "Débutant" -> "S1 : DIRECTIF (Directives & Contrôle fort)"
+                    workerExp == "Intermédiaire" && taskComp == "Complexe" -> "S2 : ENTRAÎNEUR (Explications & Soutien)"
+                    workerExp == "Intermédiaire" && taskComp == "Simple" -> "S3 : PARTICIPATIF (Échanges & Validation)"
+                    workerExp == "Expérimenté" && taskComp == "Complexe" -> "S3 : PARTICIPATIF (Conseil d'égal à égal)"
+                    workerExp == "Expérimenté" && taskComp == "Simple" -> "S4 : DÉLÉGATIF (Confiance & Autonomie)"
+                    else -> "S4 : DÉLÉGATIF TOTAL (Validation du résultat de fin)"
+                }
+
+                val styleDesc = when {
+                    workerExp == "Débutant" -> "Donnez des consignes précises : quoi faire, comment le faire, pour quand. Ne demandez pas son avis sur la méthode, montrez le geste et contrôlez l'avancement toutes les heures."
+                    workerExp.startsWith("Inter") -> "Expliquez le POURQUOI technique de la consigne. Demandez-lui comment il compte s'y prendre et guidez-le de manière bienveillante sans imposer brutalement votre méthode."
+                    workerExp.startsWith("Expér") -> "Raisonnez en termes d'objectifs globaux de production ou d'ordonnancement. Laissez-le décider du COMMENT, mais fixez un jalon de contrôle à mi-parcours."
+                    else -> "Délégation totale de la tâche. Établissez une relation de confiance. Le piège absolu serait de micro-manager cet homme, ce qui provoquerait son départ ou son désengagement total."
+                }
+
+                Text(text = "STYLE CONSEILLÉ : $styleName", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                Text(text = styleDesc, fontSize = 11.sp, color = Anthracite, lineHeight = 15.sp)
+            }
+        }
+
+        // Section 2: Simulator - Jeu de rôle interactif de crise sur le chantier
+        Text(
+            text = "Simulateur de Crise de Chantier (Interactif)",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        val crisisScenarios = remember {
+            listOf(
+                ChantierScenario(
+                    title = "Crise 1 : L'infraction de sécurité majeure",
+                    situation = "Un grutier de la boîte sous-traitante lève un fardeau de coffrage métallique lourd au-dessus de la tête d'autres ouvriers sans zone de balisage.",
+                    options = listOf(
+                        "Vous fermez les yeux car le planning est extrêmement serré aujourd'hui.",
+                        "Vous montez au derrick et engueulez le grutier par talkie-walkie en l'insultant.",
+                        "Vous sonnez immédiatement l'arrêt de la manœuvre. Vous rassemblez le chef d'équipe sous-traitant et le grutier, justifiez par le risque de mort écrasé, et faites poser un balisage physique sous 5 minutes."
+                    ),
+                    scores = listOf(Pair(-2, -2), Pair(-1, 2), Pair(2, 2)),
+                    explanation = "L'option 3 est la seule attitude de Leader (Good Man) : la sécurité de la vie humaine est non négociable. L'option 1 vous expose au pénal. L'option 2 détruit votre autorité par perte de sang-froid."
+                ),
+                ChantierScenario(
+                    title = "Crise 2 : La pression exorbitante du client",
+                    situation = "Le maître d'ouvrage (le client) exige que vous couliez une dalle de béton immédiatement, alors que l'armature métallique n'a pas reçu la validation écrite obligatoire du bureau de contrôle.",
+                    options = listOf(
+                        "Vous coulez pour faire plaisir au client et éviter qu'il résilie votre contrat.",
+                        "Vous claquez la porte au nez du client en lui hurlant qu'il ne connaît rien à la construction.",
+                        "Vous refusez de couler fermement. Vous lui expliquez le risque d'effondrement et l'annulation automatique de l'assurance décennale. Vous appelez le contrôleur avec lui pour accélérer la validation."
+                    ),
+                    scores = listOf(Pair(2, -2), Pair(-2, 1), Pair(2, 2)),
+                    explanation = "L'option 3 démontre une haute compétence et un leadership calme. Couler sans validation légale est une faute professionnelle lourde (Nice Man lâche). Agresser le client est stérile."
+                ),
+                ChantierScenario(
+                    title = "Crise 3 : L'Insubordination ouverte",
+                    situation = "Un de vos chefs d'équipe, très ancien dans la maison, refuse de nettoyer sa zone de bétonnage en fin de poste : « C'est pas à moi de balayer, embauche des manœuvres ! ».",
+                    options = listOf(
+                        "Vous nettoyez vous-même en douce le soir pour éviter l'esclandre.",
+                        "Vous le virez sur-le-champ de l'entreprise devant ses hommes.",
+                        "Vous arrêtez le travail. Vous lui dites : « Je respecte ton ancienneté mais la propreté est garante de la sécurité anti-chute de tes propres gars. Prends le balai maintenant, la règle est uniforme pour préserver le groupe. »"
+                    ),
+                    scores = listOf(Pair(1, -2), Pair(-2, 1), Pair(2, 2)),
+                    explanation = "L'option 3 fixe des limites fermes de groupe tout en valorisant son expérience de maçon. L'option 1 crée un précédent catastrophique. L'option 2 est une réaction d'orgueil disproportionnée."
+                )
+            )
+        }
+
+        var simStep by remember { mutableStateOf(0) }
+        var chosenOptionIndex by remember { mutableStateOf(-1) }
+        var warmthPoints by remember { mutableStateOf(0) }
+        var compPoints by remember { mutableStateOf(0) }
+        var simEnded by remember { mutableStateOf(false) }
+
+        if (!simEnded) {
+            val scenario = crisisScenarios[simStep]
+            OperationsCard(borderAccent = true) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = scenario.title,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+                    Text(
+                        text = scenario.situation,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Anthracite,
+                        lineHeight = 17.sp
+                    )
+
+                    Divider(color = LightGrayDivider)
+
+                    scenario.options.forEachIndexed { idx, opt ->
+                        val isSelected = chosenOptionIndex == idx
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .background(if (isSelected) LightBeige else LightGrayBg, RoundedCornerShape(8.dp))
+                                .border(width = 1.dp, color = if (isSelected) GoldClassic else Color.Transparent, shape = RoundedCornerShape(8.dp))
+                                .clickable { chosenOptionIndex = idx }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = isSelected, onClick = { chosenOptionIndex = idx }, colors = RadioButtonDefaults.colors(selectedColor = GoldClassic))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = opt, fontSize = 11.sp, color = Anthracite, lineHeight = 15.sp)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                if (chosenOptionIndex != -1) {
+                                    val (w, c) = scenario.scores[chosenOptionIndex]
+                                    warmthPoints += w
+                                    compPoints += c
+
+                                    if (simStep < crisisScenarios.size - 1) {
+                                        simStep++
+                                        chosenOptionIndex = -1
+                                    } else {
+                                        simEnded = true
+                                    }
+                                }
+                            },
+                            enabled = chosenOptionIndex != -1,
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldClassic)
+                        ) {
+                            Text("Valider la Décision", fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+        } else {
+            OperationsCard(borderAccent = true) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "RÉSULTAT DES SCÉNARIOS DE CRISE",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldClassic
+                    )
+
+                    Text(
+                        text = "Score d'Équilibre Leadership :",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Chaleur / Respect", fontSize = 10.sp, color = MediumGray)
+                            Text("$warmthPoints/6", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                        }
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Compétence / Décision", fontSize = 10.sp, color = MediumGray)
+                            Text("$compPoints/6", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        }
+                    }
+
+                    val simResultDesc = if (warmthPoints >= 4 && compPoints >= 4) {
+                        "✨ EXCELLENT (Good Man) : Vous possédez un sang-froid et une intelligence situationnelle exceptionnels. Vos décisions concilient parfaitement impératifs techniques rigoureux et préservation de la vie humaine."
+                    } else if (compPoints >= 4) {
+                        "😡 PETIT CHEF : Vos choix sont techniquement logiques mais votre communication agressive sème la discorde et brise le moral de vos troupes."
+                    } else {
+                        "🥺 NICE MAN / LAXISTE : Vous privilégiez le confort immédiat au détriment de la sécurité et des obligations juridiques. Le chantier court à la catastrophe."
+                    }
+
+                    Text(
+                        text = simResultDesc,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite,
+                        lineHeight = 16.sp
+                    )
+
+                    Button(
+                        onClick = {
+                            simStep = 0
+                            chosenOptionIndex = -1
+                            warmthPoints = 0
+                            compPoints = 0
+                            simEnded = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Anthracite),
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text("Recommencer la Simulation", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TabMossadLevel() {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Warning Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(LightBeige, RoundedCornerShape(10.dp))
+                .border(width = 0.5.dp, color = LightGrayDivider, shape = RoundedCornerShape(10.dp))
+                .padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Avertissement",
+                    tint = GoldClassic,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "DÉBULLONAGE SCIENTIFIQUE : Le décodage corporel populaire (micro-expressions, regard fuyant) est scientifiquement faux (précision de 54%, identique au pur hasard). Le Mossad et les services secrets de pointe utilisent l'approche cognitive (S.E.T.S.), validée par la science (75% de réussite). Elle repose sur la saturation de la charge mentale.",
+                    fontSize = 11.sp,
+                    color = Anthracite,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+
+        // Section: Les 3 piliers de la méthode cognitive
+        Text(
+            text = "Les 3 Piliers de la Détection Cognitive (Granhag, 2014)",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        val mossadPillars = listOf(
+            Triple(
+                "1. L'Établissement de la Baseline",
+                "Ne commencez jamais par accuser ou interroger sur le sujet chaud. Posez d'abord 5 questions de routine neutres (météo, déroulement de la matinée, trajet). Observez son rythme de parole habituel, ses expressions et sa vitesse de réponse naturelle. C'est votre niveau de référence unique.",
+                "📊 Création de référence"
+            ),
+            Triple(
+                "2. La Surcharge Cognitive Spontanée",
+                "Mentir demande un effort intellectuel complexe (garder l'histoire cohérente). Augmentez cet effort en demandant de raconter les faits dans l'ordre inverse (de la fin de journée au matin), ou de décrire des détails sensoriels superflus (odeurs, bruits d'ambiance). Un menteur s'effondrera sous l'effort.",
+                "🧠 Saturation mentale"
+            ),
+            Triple(
+                "3. L'Utilisation Stratégique des Preuves (S.E.T.S.)",
+                "Si vous possédez une preuve (photo, bon de livraison erroné), NE la montrez JAMAIS au début. Laissez le suspect formuler des explications libres. Posez des questions larges, puis resserrez le piège. Lorsqu'il a menti de manière incontestable, abattez la preuve physique. La contradiction scelle sa culpabilité.",
+                "🧩 Méthode S.E.T.S."
+            )
+        )
+
+        mossadPillars.forEach { (title, desc, badge) ->
+            var expanded by remember { mutableStateOf(false) }
+            OperationsCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = !expanded }
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        Box(
+                            modifier = Modifier
+                                .background(LightBeige, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(text = badge, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GoldClassic)
+                        }
+                    }
+                    if (expanded) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = desc,
+                            fontSize = 11.sp,
+                            color = MediumGray,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section: Simulateur Interactif "L'enquête du Matériel Disparu"
+        Text(
+            text = "Simulateur Interactif : L'Enquête du Matériel Disparu",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Anthracite,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        var step by remember { mutableStateOf(1) } // 1, 2, 3, 4 (end)
+        var scoreInvestigation by remember { mutableStateOf(0) }
+        var investigativeFeedbacks = remember { mutableStateListOf<String>() }
+
+        OperationsCard(borderAccent = true) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "L'enquête : Un de vos conducteurs de travaux est suspecté de détourner des sacs de ciment spéciaux du stock.",
+                    fontSize = 11.sp,
+                    color = Anthracite,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 15.sp
+                )
+
+                Divider(color = LightGrayDivider)
+
+                when (step) {
+                    1 -> {
+                        Text(
+                            text = "PHASE 1 : Établir la Baseline",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic
+                        )
+                        Text(
+                            text = "Vous recevez le suspect dans votre bureau de chantier. Quelle est votre première question ?",
+                            fontSize = 11.sp,
+                            color = Anthracite
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(
+                                onClick = {
+                                    scoreInvestigation += 2
+                                    investigativeFeedbacks.add("Félicitations. Vous avez posé une question neutre sur la route qui permet d'évaluer sa vitesse de parole habituelle et son aisance d'expression.")
+                                    step = 2
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = LightGrayBg),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("« Salut Pierre. Comment s'est passé ton trajet ce matin ? Pas trop de bouchons à l'entrée ouest ? »", color = Anthracite, fontSize = 10.sp, textAlign = TextAlign.Start)
+                            }
+                            Button(
+                                onClick = {
+                                    scoreInvestigation -= 2
+                                    investigativeFeedbacks.add("Erreur stratégique : Lancer l'accusation d'emblée détruit toute chance d'observer sa baseline de parole habituelle. Il se referme immédiatement.")
+                                    step = 2
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = LightGrayBg),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("« Est-ce que c'est toi qui voles le ciment du stock de la dalle sud ? Réponds-moi honnêtement ! »", color = Anthracite, fontSize = 10.sp, textAlign = TextAlign.Start)
+                            }
+                        }
+                    }
+                    2 -> {
+                        Text(
+                            text = "PHASE 2 : La Surcharge Cognitive",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic
+                        )
+                        Text(
+                            text = "Il affirme qu'il était absent de la zone hier entre 14h et 16h car il inspectait l'étanchéité du bâtiment B. Comment saturez-vous sa mémoire ?",
+                            fontSize = 11.sp,
+                            color = Anthracite
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(
+                                onClick = {
+                                    scoreInvestigation += 3
+                                    investigativeFeedbacks.add("Excellent. Le forcer à raconter son inspection à l'envers ou demander des détails sensoriels précis sature l'effort mental. Un mensonge se fissure face à cet exercice.")
+                                    step = 3
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = LightGrayBg),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("« Raconte-moi ton inspection en partant de ta descente du bâtiment B à 16h jusqu'à ton entrée à 14h. Quel temps faisait-il ? Quels bruits as-tu entendus ? »", color = Anthracite, fontSize = 10.sp)
+                            }
+                            Button(
+                                onClick = {
+                                    scoreInvestigation -= 1
+                                    investigativeFeedbacks.add("Insuffisant : Cette question trop directe et linéaire n'exige aucun effort cognitif de construction mentale. Il récite son mensonge préparé sans forcer.")
+                                    step = 3
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = LightGrayBg),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("« Est-ce que tu as fini l'étanchéité ? Le travail était-il difficile ? »", color = Anthracite, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                    3 -> {
+                        Text(
+                            text = "PHASE 3 : Utilisation Stratégique des Preuves (S.E.T.S.)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic
+                        )
+                        Text(
+                            text = "Vous possédez une photo du badge d'accès de son utilitaire montrant qu'il est passé à 14h12 par la zone de stockage sud. Que faites-vous ?",
+                            fontSize = 11.sp,
+                            color = Anthracite
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(
+                                onClick = {
+                                    scoreInvestigation += 3
+                                    investigativeFeedbacks.add("Brillant ! Vous le laissez s'enfermer dans son déni avant d'abattre la preuve physique. Il ne peut plus s'échapper ou inventer une parade légitime tardive.")
+                                    step = 4
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = LightGrayBg),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("« Tu es sûr de n'avoir pas approché le stockage sud ? Aucun passage de ton utilitaire là-bas entre 14h et 16h ? » (Puis vous montrez la photo du badge après sa confirmation écrite)", color = Anthracite, fontSize = 10.sp)
+                            }
+                            Button(
+                                onClick = {
+                                    scoreInvestigation -= 2
+                                    investigativeFeedbacks.add("Mauvais timing : Poser la preuve sur la table dès le début lui permet d'inventer instantanément une parade plausible : « Ah oui, j'ai oublié, je suis passé chercher un câble... ».")
+                                    step = 4
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = LightGrayBg),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("« Tiens, regarde cette photo ! Ton utilitaire était bien au stockage sud à 14h12. Tu m'expliques ce mensonge ?! »", color = Anthracite, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                    4 -> {
+                        Text(
+                            text = "RÉSULTAT DE VOTRE ENQUÊTE",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic
+                        )
+
+                        Text(
+                            text = "Score Cognitif : $scoreInvestigation/8",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            investigativeFeedbacks.forEach { feedback ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(top = 4.dp)
+                                            .size(5.dp)
+                                            .background(GoldClassic, CircleShape)
+                                    )
+                                    Text(text = feedback, fontSize = 11.sp, color = MediumGray, lineHeight = 15.sp)
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                step = 1
+                                scoreInvestigation = 0
+                                investigativeFeedbacks.clear()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Anthracite),
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) {
+                            Text("Recommencer l'Enquête", color = Color.White, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Point 1
+        var c1Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { c1Expanded = !c1Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "1. Établir le baseline de parole habituelle",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (c1Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (c1Expanded) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Observe comment une personne se comporte normalement (son « baseline » : rythme de parole, tics de langage, contact visuel habituel) lors de sujets neutres et simples avant de chercher des écarts significatifs lors d'une question importante. Il n'existe pas de signal universel isolé du mensonge, seulement des variations par rapport au comportement habituel de l'individu.",
+                        fontSize = 12.sp,
+                        color = MediumGray,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+        }
+
+        // Point 2
+        var c2Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { c2Expanded = !c2Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "2. Raconter les événements dans l'ordre inverse",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (c2Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (c2Expanded) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Mentir demande déjà un effort cognitif important car il faut construire et mémoriser un récit faux. Ajouter une charge mentale supplémentaire — comme demander de raconter l'histoire depuis la fin jusqu'au début ou d'expliquer un détail précis à reculons — fait s'effondrer le récit fabriqué d'un menteur alors qu'un récit vécu résistera sans peine.",
+                        fontSize = 12.sp,
+                        color = MediumGray,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+        }
+
+        // Point 3
+        var c3Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { c3Expanded = !c3Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "3. Demander des détails sensoriels inattendus",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (c3Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (c3Expanded) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "« Que sentait-on dans la pièce ? », « Quel bruit y avait-il en arrière-plan ? », « Quel temps faisait-il exactement quand tu es descendu de voiture ? ». Les récits inventés sont construits de manière logique et chronologique mais manquent typiquement de détails sensoriels secondaires inattendus.",
+                        fontSize = 12.sp,
+                        color = MediumGray,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+        }
+
+        // Point 4
+        var p4_Expanded by remember { mutableStateOf(false) }
+        OperationsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { p4_Expanded = !p4_Expanded }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "4. Analyser la cohérence verbale",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+                    Icon(
+                        imageVector = if (p4_Expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Développer",
+                        tint = GoldClassic,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (p4_Expanded) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Analyse la structure des mots plutôt que le visage : un récit authentique contient fréquemment des auto-corrections spontanées (« ah non, c'était plutôt mardi, attends, oui mardi ») et des détails superflus non pertinents. Un récit mensonger est presque toujours trop propre, trop linéaire, sans la moindre hésitation sur la chronologie logique globale.",
+                        fontSize = 12.sp,
+                        color = MediumGray,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+        }
+
+        // Ethical Reminder Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(LightBeige, RoundedCornerShape(10.dp))
+                .border(width = 0.5.dp, color = LightGrayDivider, shape = RoundedCornerShape(10.dp))
+                .padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = "Éthique",
+                    tint = GoldClassic,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "Ces techniques donnent des indices probabilistes, jamais une certitude. Toujours vérifier par des faits concrets avant de tirer une conclusion définitive sur quelqu'un — particulièrement important dans un contexte de management où les décisions affectent le travail et la réputation des autres.",
+                    fontSize = 11.sp,
+                    color = Anthracite,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
+
+
+
 
 
 
