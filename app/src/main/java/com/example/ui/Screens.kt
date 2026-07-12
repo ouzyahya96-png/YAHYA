@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -65,6 +66,42 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // --- Reusable Elegant Components ---
+
+@Composable
+fun StaggeredListItem(
+    index: Int,
+    content: @Composable () -> Unit
+) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val delayTime = (index * 35L).coerceAtMost(300L)
+        delay(delayTime)
+        visible = true
+    }
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(
+            animationSpec = tween(
+                durationMillis = MotionTokens.DURATION_STANDARD,
+                easing = MotionTokens.EasingDecelerate
+            )
+        ) + slideInVertically(
+            initialOffsetY = { 20 },
+            animationSpec = tween(
+                durationMillis = MotionTokens.DURATION_STANDARD,
+                easing = MotionTokens.EasingDecelerate
+            )
+        ),
+        exit = fadeOut(
+            animationSpec = tween(
+                durationMillis = MotionTokens.DURATION_STANDARD,
+                easing = MotionTokens.EasingAccelerate
+            )
+        )
+    ) {
+        content()
+    }
+}
 
 @Composable
 fun GoldGradientButton(
@@ -1354,47 +1391,49 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
                         contentPadding = PaddingValues(horizontal = 4.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(favoriteIndices) { pageIdx ->
-                            val pageInfo = allPagesList.find { it.index == pageIdx }
-                            if (pageInfo != null) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier
-                                        .width(68.dp)
-                                        .pointerInput(pageIdx) {
-                                            detectTapGestures(
-                                                onTap = { onNavigateToPage(pageInfo.index) },
-                                                onLongPress = {
-                                                    tempFavorites = favoriteIndices
-                                                    showFavoritesDialog = true
-                                                }
+                        itemsIndexed(favoriteIndices) { index, pageIdx ->
+                            StaggeredListItem(index = index) {
+                                val pageInfo = allPagesList.find { it.index == pageIdx }
+                                if (pageInfo != null) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier
+                                            .width(68.dp)
+                                            .pointerInput(pageIdx) {
+                                                detectTapGestures(
+                                                    onTap = { onNavigateToPage(pageInfo.index) },
+                                                    onLongPress = {
+                                                        tempFavorites = favoriteIndices
+                                                        showFavoritesDialog = true
+                                                    }
+                                                )
+                                            }
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .background(LightBeige, CircleShape)
+                                                .border(1.dp, GoldClassic.copy(alpha = 0.5f), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = pageInfo.icon,
+                                                contentDescription = pageInfo.title,
+                                                tint = GoldClassic,
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .background(LightBeige, CircleShape)
-                                            .border(1.dp, GoldClassic.copy(alpha = 0.5f), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = pageInfo.icon,
-                                            contentDescription = pageInfo.title,
-                                            tint = GoldClassic,
-                                            modifier = Modifier.size(20.dp)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = pageInfo.title,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Anthracite,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
                                         )
                                     }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = pageInfo.title,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Anthracite,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        textAlign = TextAlign.Center
-                                    )
                                 }
                             }
                         }
@@ -2134,8 +2173,10 @@ fun TodoListPage(viewModel: OperationsViewModel) {
                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
                     }
-                    items(morningTasks, key = { "morning_${it.id}" }) { task ->
-                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    itemsIndexed(morningTasks, key = { _, it -> "morning_${it.id}" }) { index, task ->
+                        StaggeredListItem(index = index) {
+                            TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                        }
                     }
                 }
 
@@ -2149,8 +2190,10 @@ fun TodoListPage(viewModel: OperationsViewModel) {
                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
                     }
-                    items(afternoonTasks, key = { "afternoon_${it.id}" }) { task ->
-                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    itemsIndexed(afternoonTasks, key = { _, it -> "afternoon_${it.id}" }) { index, task ->
+                        StaggeredListItem(index = index) {
+                            TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                        }
                     }
                 }
 
@@ -2164,8 +2207,10 @@ fun TodoListPage(viewModel: OperationsViewModel) {
                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
                     }
-                    items(eveningTasks, key = { "evening_${it.id}" }) { task ->
-                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    itemsIndexed(eveningTasks, key = { _, it -> "evening_${it.id}" }) { index, task ->
+                        StaggeredListItem(index = index) {
+                            TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                        }
                     }
                 }
 
@@ -2179,8 +2224,10 @@ fun TodoListPage(viewModel: OperationsViewModel) {
                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
                     }
-                    items(unscheduledTasks, key = { "unscheduled_${it.id}" }) { task ->
-                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    itemsIndexed(unscheduledTasks, key = { _, it -> "unscheduled_${it.id}" }) { index, task ->
+                        StaggeredListItem(index = index) {
+                            TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                        }
                     }
                 }
             }
@@ -2210,8 +2257,10 @@ fun TodoListPage(viewModel: OperationsViewModel) {
                 }
 
                 if (!isCompletedCollapsed) {
-                    items(completedTasks, key = { it.id }) { task ->
-                        TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                    itemsIndexed(completedTasks, key = { _, it -> it.id }) { index, task ->
+                        StaggeredListItem(index = index) {
+                            TaskRow(task = task, onToggle = { viewModel.toggleTaskDone(task) }, onDelete = { viewModel.deleteTask(task.id) })
+                        }
                     }
                 }
             }
@@ -3305,75 +3354,77 @@ fun ComplementsPage(viewModel: OperationsViewModel) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        listSupplements.forEach { info ->
-            OperationsCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = info.name,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Anthracite
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Timing : ${info.moment}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = GoldClassic
-                            )
-                            if (info.key == "ashwagandha" || info.key == "tongkatAli") {
-                                val streak = viewModel.calculateConsecutiveDaysTaken(info.key)
-                                Spacer(modifier = Modifier.height(2.dp))
+        listSupplements.forEachIndexed { index, info ->
+            StaggeredListItem(index = index) {
+                OperationsCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Pris en continu depuis $streak jours",
-                                    fontSize = 11.sp,
-                                    color = MediumGray
+                                    text = info.name,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Anthracite
                                 )
-                                if (streak >= 56) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        modifier = Modifier
-                                            .background(Color(0xFFFFF9E6), RoundedCornerShape(4.dp))
-                                            .border(0.5.dp, Color(0xFFFFB300), RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Info,
-                                            contentDescription = "Pause",
-                                            tint = Color(0xFFFFB300),
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                        Text(
-                                            text = "Pause de 2-4 semaines recommandée",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFB78103)
-                                        )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Timing : ${info.moment}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = GoldClassic
+                                )
+                                if (info.key == "ashwagandha" || info.key == "tongkatAli") {
+                                    val streak = viewModel.calculateConsecutiveDaysTaken(info.key)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Pris en continu depuis $streak jours",
+                                        fontSize = 11.sp,
+                                        color = MediumGray
+                                    )
+                                    if (streak >= 56) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier
+                                                .background(Color(0xFFFFF9E6), RoundedCornerShape(4.dp))
+                                                .border(0.5.dp, Color(0xFFFFB300), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Info,
+                                                contentDescription = "Pause",
+                                                tint = Color(0xFFFFB300),
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Text(
+                                                text = "Pause de 2-4 semaines recommandée",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFB78103)
+                                            )
+                                        }
                                     }
                                 }
                             }
+                            PremiumCheckbox(
+                                checked = info.taken,
+                                onCheckedChange = { viewModel.toggleSupplement(info.key, it) }
+                            )
                         }
-                        PremiumCheckbox(
-                            checked = info.taken,
-                            onCheckedChange = { viewModel.toggleSupplement(info.key, it) }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = info.justification,
+                            fontSize = 12.sp,
+                            color = MediumGray,
+                            style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = info.justification,
-                        fontSize = 12.sp,
-                        color = MediumGray,
-                        style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
-                    )
                 }
             }
         }
@@ -13745,11 +13796,13 @@ fun ChantiersPage(viewModel: OperationsViewModel) {
                         }
                     }
                 } else {
-                    items(chantiers) { chantier ->
-                        ChantierCard(
-                            chantier = chantier,
-                            onClick = { selectedChantierId = chantier.id }
-                        )
+                    itemsIndexed(chantiers) { index, chantier ->
+                        StaggeredListItem(index = index) {
+                            ChantierCard(
+                                chantier = chantier,
+                                onClick = { selectedChantierId = chantier.id }
+                            )
+                        }
                     }
                 }
             }
@@ -15414,24 +15467,26 @@ fun StreaksOverviewPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) 
             // Grid of streaks
             val chunkedStreaks = sortedStreaks.chunked(2)
             items(chunkedStreaks.size) { index ->
-                val rowItems = chunkedStreaks[index]
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    StreakCard(
-                        item = rowItems[0],
-                        onNavigate = onNavigateToPage,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (rowItems.size > 1) {
+                StaggeredListItem(index = index) {
+                    val rowItems = chunkedStreaks[index]
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         StreakCard(
-                            item = rowItems[1],
+                            item = rowItems[0],
                             onNavigate = onNavigateToPage,
                             modifier = Modifier.weight(1f)
                         )
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
+                        if (rowItems.size > 1) {
+                            StreakCard(
+                                item = rowItems[1],
+                                onNavigate = onNavigateToPage,
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
                     }
                 }
             }

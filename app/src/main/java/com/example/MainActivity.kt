@@ -36,6 +36,10 @@ import com.example.data.AppDatabase
 import com.example.data.OperationsRepository
 import com.example.ui.*
 import com.example.ui.theme.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.combinedClickable
+import kotlinx.coroutines.delay
 
 class MainActivity : FragmentActivity() {
     private val isUnlockedState = mutableStateOf(false)
@@ -301,36 +305,74 @@ data class NavigationItem(
     val pageIndex: Int
 )
 
+fun hasAttentionNeeded(pageIndex: Int, viewModel: OperationsViewModel): Boolean {
+    val todayStr = viewModel.getTodayDate()
+    return when (pageIndex) {
+        3 -> { // Compléments
+            val log = viewModel.supplementLogs.value.firstOrNull { it.date == todayStr }
+            log == null || !(log.creatine && log.omega3 && log.magnesium && log.ashwagandha && 
+                             log.tongkatAli && log.vitaminD3 && log.zinc && log.lTheanine && 
+                             log.boron && log.lCitrulline)
+        }
+        5 -> { // Récupération
+            val log = viewModel.kegelLogs.value.firstOrNull { it.date == todayStr }
+            log == null || !log.done
+        }
+        7 -> { // Communication
+            val log = viewModel.communicationPracticeLogs.value.firstOrNull { it.date == todayStr }
+            log == null || !log.practiced
+        }
+        else -> false
+    }
+}
+
 @Composable
 fun MainAppLayout(viewModel: OperationsViewModel) {
     var selectedPageIndex by remember { mutableIntStateOf(0) }
     var isSidebarOpen by remember { mutableStateOf(true) }
     var showGlobalBreathing by remember { mutableStateOf(false) }
 
+    // State flows collected reactively for attention indicators
+    val supplementLogs by viewModel.supplementLogs.collectAsState()
+    val kegelLogs by viewModel.kegelLogs.collectAsState()
+    val communicationPracticeLogs by viewModel.communicationPracticeLogs.collectAsState()
+
     val sidebarWidth by animateDpAsState(
         targetValue = if (isSidebarOpen) 190.dp else 64.dp,
+        animationSpec = tween(
+            durationMillis = MotionTokens.DURATION_STANDARD,
+            easing = MotionTokens.EasingStandard
+        ),
         label = "SidebarWidth"
     )
 
-    val navItems = remember {
+    val navGroups = remember {
         listOf(
-            NavigationItem("Rituel", Icons.Filled.Checklist, Icons.Outlined.Checklist, 16),
-            NavigationItem("Mes Streaks", Icons.Filled.LocalFireDepartment, Icons.Outlined.LocalFireDepartment, 17),
-            NavigationItem("Dashboard", Icons.Filled.GridView, Icons.Outlined.GridView, 0),
-            NavigationItem("Pourquoi", Icons.Filled.Favorite, Icons.Outlined.Favorite, 11),
-            NavigationItem("Affirmations", Icons.Filled.SelfImprovement, Icons.Outlined.SelfImprovement, 12),
-            NavigationItem("To-Do List", Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle, 1),
-            NavigationItem("Calendrier", Icons.Filled.DateRange, Icons.Outlined.DateRange, 2),
-            NavigationItem("Chantiers", Icons.Filled.Construction, Icons.Outlined.Construction, 15),
-            NavigationItem("Compléments", Icons.Filled.LocalPharmacy, Icons.Outlined.LocalPharmacy, 3),
-            NavigationItem("GYM", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter, 4),
-            NavigationItem("Récupération", Icons.Filled.FlashOn, Icons.Outlined.FlashOn, 5),
-            NavigationItem("Neurosciences", Icons.Filled.Psychology, Icons.Outlined.Psychology, 13),
-            NavigationItem("Testostérone", Icons.Filled.WbSunny, Icons.Outlined.WbSunny, 6),
-            NavigationItem("Communication", Icons.Filled.Forum, Icons.Outlined.Forum, 7),
-            NavigationItem("Leadership", Icons.Filled.Groups, Icons.Outlined.Groups, 14),
-            NavigationItem("Sommeil", Icons.Filled.NightsStay, Icons.Outlined.NightsStay, 8),
-            NavigationItem("Great Reset", Icons.Filled.Inventory2, Icons.Outlined.Inventory2, 9)
+            "OPÉRATIONS" to listOf(
+                NavigationItem("Dashboard", Icons.Filled.GridView, Icons.Outlined.GridView, 0),
+                NavigationItem("To-Do List", Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle, 1),
+                NavigationItem("Calendrier", Icons.Filled.DateRange, Icons.Outlined.DateRange, 2),
+                NavigationItem("Rituel", Icons.Filled.Checklist, Icons.Outlined.Checklist, 16),
+                NavigationItem("Chantiers", Icons.Filled.Construction, Icons.Outlined.Construction, 15)
+            ),
+            "SANTÉ" to listOf(
+                NavigationItem("Compléments", Icons.Filled.LocalPharmacy, Icons.Outlined.LocalPharmacy, 3),
+                NavigationItem("GYM", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter, 4),
+                NavigationItem("Récupération", Icons.Filled.FlashOn, Icons.Outlined.FlashOn, 5),
+                NavigationItem("Testostérone", Icons.Filled.WbSunny, Icons.Outlined.WbSunny, 6),
+                NavigationItem("Sommeil", Icons.Filled.NightsStay, Icons.Outlined.NightsStay, 8)
+            ),
+            "ESPRIT" to listOf(
+                NavigationItem("Neurosciences", Icons.Filled.Psychology, Icons.Outlined.Psychology, 13),
+                NavigationItem("Affirmations", Icons.Filled.SelfImprovement, Icons.Outlined.SelfImprovement, 12),
+                NavigationItem("Pourquoi", Icons.Filled.Favorite, Icons.Outlined.Favorite, 11),
+                NavigationItem("Communication", Icons.Filled.Forum, Icons.Outlined.Forum, 7),
+                NavigationItem("Leadership", Icons.Filled.Groups, Icons.Outlined.Groups, 14)
+            ),
+            "SYSTÈME" to listOf(
+                NavigationItem("Great Reset", Icons.Filled.Inventory2, Icons.Outlined.Inventory2, 9),
+                NavigationItem("Mes Streaks", Icons.Filled.LocalFireDepartment, Icons.Outlined.LocalFireDepartment, 17)
+            )
         )
     }
 
@@ -346,60 +388,112 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                     .width(sidebarWidth)
                     .fillMaxHeight()
                     .background(WhitePure)
-                    .border(width = (0.5).dp, color = LightGrayDivider)
             ) {
-                // Sidebar Header with Toggle button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 16.dp),
-                    horizontalArrangement = if (isSidebarOpen) Arrangement.SpaceBetween else Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isSidebarOpen) {
-                        Text(
-                            text = "OPÉRATIONS",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldClassic,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.padding(start = 6.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = { isSidebarOpen = !isSidebarOpen },
-                        modifier = Modifier.size(28.dp).testTag("sidebar_toggle")
+                // Persistent Brand Indicator & Toggle button in header
+                Spacer(modifier = Modifier.height(16.dp))
+                if (isSidebarOpen) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            imageVector = if (isSidebarOpen) Icons.Default.ChevronLeft else Icons.Default.Menu,
-                            contentDescription = "Toggle Sidebar",
-                            tint = GoldClassic,
-                            modifier = Modifier.size(18.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(GradientTokens.sunsetHorizontal, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "DIRECTEUR",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic,
+                                letterSpacing = 1.5.sp
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { isSidebarOpen = !isSidebarOpen },
+                            modifier = Modifier.size(24.dp).testTag("sidebar_toggle")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronLeft,
+                                contentDescription = "Toggle Sidebar",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(GradientTokens.sunsetHorizontal, CircleShape)
                         )
+                        IconButton(
+                            onClick = { isSidebarOpen = !isSidebarOpen },
+                            modifier = Modifier.size(28.dp).testTag("sidebar_toggle")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Toggle Sidebar",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Navigation menu items
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    navItems.forEach { item ->
-                        SidebarItem(
-                            item = item,
-                            isActive = selectedPageIndex == item.pageIndex,
-                            isSidebarOpen = isSidebarOpen,
-                            onClick = { 
-                                selectedPageIndex = item.pageIndex 
-                                isSidebarOpen = false
-                            }
-                        )
+                // Scrollable Navigation menu items grouped by categories
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    navGroups.forEachIndexed { groupIdx, (categoryName, items) ->
+                        if (isSidebarOpen) {
+                            Text(
+                                text = categoryName,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MediumGray,
+                                letterSpacing = 1.sp,
+                                modifier = Modifier.padding(start = 16.dp, top = if (groupIdx > 0) 12.dp else 4.dp, bottom = 4.dp)
+                            )
+                        } else if (groupIdx > 0) {
+                            Divider(
+                                color = LightGrayDivider,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        items.forEach { item ->
+                            SidebarItem(
+                                item = item,
+                                isActive = selectedPageIndex == item.pageIndex,
+                                isSidebarOpen = isSidebarOpen,
+                                hasAttention = hasAttentionNeeded(item.pageIndex, viewModel),
+                                onClick = { 
+                                    selectedPageIndex = item.pageIndex 
+                                    isSidebarOpen = false
+                                }
+                            )
+                        }
                     }
                 }
 
                 // Push settings to the bottom
-                Spacer(modifier = Modifier.weight(1f))
-
                 Divider(color = LightGrayDivider, modifier = Modifier.padding(horizontal = 8.dp))
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -408,6 +502,7 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                     item = settingsItem,
                     isActive = selectedPageIndex == settingsItem.pageIndex,
                     isSidebarOpen = isSidebarOpen,
+                    hasAttention = false,
                     onClick = { 
                         selectedPageIndex = settingsItem.pageIndex 
                         isSidebarOpen = false
@@ -416,6 +511,14 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
+
+            // Elegant single file border / divider on right edge
+            Box(
+                modifier = Modifier
+                    .width(0.5.dp)
+                    .fillMaxHeight()
+                    .background(LightGrayDivider)
+            )
 
             // --- MAIN SCREEN PANELS (RIGHT) ---
             Box(
@@ -427,8 +530,82 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                 AnimatedContent(
                     targetState = selectedPageIndex,
                     transitionSpec = {
-                        (fadeIn(animationSpec = tween(220)) + slideInHorizontally(animationSpec = tween(220)) { width -> width / 20 }) togetherWith
-                        (fadeOut(animationSpec = tween(220)) + slideOutHorizontally(animationSpec = tween(220)) { width -> -width / 20 })
+                        val isForward = targetState >= initialState
+                        if (isForward) {
+                            val enterTransition = fadeIn(
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            ) + slideInHorizontally(
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            ) { width -> width / 10 } + scaleIn(
+                                initialScale = 0.95f,
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            )
+                            
+                            val exitTransition = fadeOut(
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            ) + slideOutHorizontally(
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            ) { width -> -width / 10 } + scaleOut(
+                                targetScale = 0.97f,
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            )
+                            enterTransition togetherWith exitTransition
+                        } else {
+                            val enterTransition = fadeIn(
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            ) + slideInHorizontally(
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            ) { width -> -width / 10 } + scaleIn(
+                                initialScale = 0.95f,
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            )
+                            
+                            val exitTransition = fadeOut(
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            ) + slideOutHorizontally(
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            ) { width -> width / 10 } + scaleOut(
+                                targetScale = 0.97f,
+                                animationSpec = tween(
+                                    durationMillis = MotionTokens.DURATION_EMPHASIZED,
+                                    easing = MotionTokens.EasingEmphasized
+                                )
+                            )
+                            enterTransition togetherWith exitTransition
+                        }
                     },
                     label = "PageTransition"
                 ) { targetIndex ->
@@ -552,13 +729,34 @@ fun SidebarItem(
     item: NavigationItem,
     isActive: Boolean,
     isSidebarOpen: Boolean,
+    hasAttention: Boolean = false,
     onClick: () -> Unit
 ) {
+    var showTooltip by remember { mutableStateOf(false) }
+
+    // Auto dismiss after 1.5 seconds
+    LaunchedEffect(showTooltip) {
+        if (showTooltip) {
+            delay(1500)
+            showTooltip = false
+        }
+    }
+
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val offsetX = with(density) { 60.dp.roundToPx() }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .pressClickEffect { onClick() }
+            .combinedPressClickEffect(
+                onClick = { onClick() },
+                onLongClick = {
+                    if (!isSidebarOpen) {
+                        showTooltip = true
+                    }
+                }
+            )
             .background(if (isActive) LightBeige else Color.Transparent),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -569,12 +767,22 @@ fun SidebarItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (isSidebarOpen) Arrangement.Start else Arrangement.Center
         ) {
-            Icon(
-                imageVector = if (isActive) item.activeIcon else item.inactiveIcon,
-                contentDescription = item.label,
-                tint = if (isActive) GoldClassic else MediumGray,
-                modifier = Modifier.size(20.dp)
-            )
+            Box(contentAlignment = Alignment.TopEnd) {
+                Icon(
+                    imageVector = if (isActive) item.activeIcon else item.inactiveIcon,
+                    contentDescription = item.label,
+                    tint = if (isActive) GoldClassic else MediumGray,
+                    modifier = Modifier.size(20.dp)
+                )
+                if (hasAttention) {
+                    Box(
+                        modifier = Modifier
+                            .offset(x = 4.dp, y = (-4).dp)
+                            .size(6.dp)
+                            .background(GoldClassic, CircleShape)
+                    )
+                }
+            }
 
             if (isSidebarOpen) {
                 Spacer(modifier = Modifier.width(12.dp))
@@ -598,12 +806,36 @@ fun SidebarItem(
                     .background(GradientTokens.sunsetVertical)
             )
         }
+
+        // Tooltip popup
+        if (showTooltip && !isSidebarOpen) {
+            androidx.compose.ui.window.Popup(
+                alignment = Alignment.CenterStart,
+                offset = androidx.compose.ui.unit.IntOffset(x = offsetX, y = 0),
+                onDismissRequest = { showTooltip = false }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(Anthracite, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = item.label,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun Modifier.pressClickEffect(
+fun Modifier.combinedPressClickEffect(
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ): Modifier {
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -614,9 +846,10 @@ fun Modifier.pressClickEffect(
     )
     return this
         .scale(scale)
-        .clickable(
+        .combinedClickable(
             interactionSource = interactionSource,
             indication = androidx.compose.foundation.LocalIndication.current,
-            onClick = onClick
+            onClick = onClick,
+            onLongClick = onLongClick
         )
 }
