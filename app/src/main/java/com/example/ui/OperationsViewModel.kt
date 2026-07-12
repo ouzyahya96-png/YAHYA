@@ -87,9 +87,52 @@ class OperationsViewModel(
     val gratitudeLogs: StateFlow<List<GratitudeLog>> = repository.gratitudeLogsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val chantiers: StateFlow<List<Chantier>> = repository.chantiersFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allMilestones: StateFlow<List<ChantierMilestone>> = repository.allMilestonesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- Settings / Preferences State ---
     private val _whyStatement = MutableStateFlow(sharedPrefs.getString("why_statement", "") ?: "")
     val whyStatement: StateFlow<String> = _whyStatement.asStateFlow()
+
+    private val _goalName = MutableStateFlow(sharedPrefs.getString("goal_name", "Mon mariage") ?: "Mon mariage")
+    val goalName: StateFlow<String> = _goalName.asStateFlow()
+
+    private val _goalTargetDate = MutableStateFlow(sharedPrefs.getString("goal_target_date", "") ?: "")
+    val goalTargetDate: StateFlow<String> = _goalTargetDate.asStateFlow()
+
+    private val _selectedCalendarDate = MutableStateFlow(getTodayDate())
+    val selectedCalendarDate: StateFlow<String> = _selectedCalendarDate.asStateFlow()
+
+    private val _calendarViewMode = MutableStateFlow("Semaine")
+    val calendarViewMode: StateFlow<String> = _calendarViewMode.asStateFlow()
+
+    private val _showAlerts = MutableStateFlow(sharedPrefs.getBoolean("dashboard_show_alerts", true))
+    val showAlerts: StateFlow<Boolean> = _showAlerts.asStateFlow()
+
+    private val _showCountdown = MutableStateFlow(sharedPrefs.getBoolean("dashboard_show_countdown", true))
+    val showCountdown: StateFlow<Boolean> = _showCountdown.asStateFlow()
+
+    private val _showWeeklyPreview = MutableStateFlow(sharedPrefs.getBoolean("dashboard_show_weekly_preview", true))
+    val showWeeklyPreview: StateFlow<Boolean> = _showWeeklyPreview.asStateFlow()
+
+    private val _showAffirmation = MutableStateFlow(sharedPrefs.getBoolean("dashboard_show_affirmation", true))
+    val showAffirmation: StateFlow<Boolean> = _showAffirmation.asStateFlow()
+
+    private val _showGratitude = MutableStateFlow(sharedPrefs.getBoolean("dashboard_show_gratitude", true))
+    val showGratitude: StateFlow<Boolean> = _showGratitude.asStateFlow()
+
+    private val _showFavorites = MutableStateFlow(sharedPrefs.getBoolean("dashboard_show_favorites", true))
+    val showFavorites: StateFlow<Boolean> = _showFavorites.asStateFlow()
+
+    private val _showSecondaryGrid = MutableStateFlow(sharedPrefs.getBoolean("dashboard_show_secondary_grid", true))
+    val showSecondaryGrid: StateFlow<Boolean> = _showSecondaryGrid.asStateFlow()
+
+    private val _showGeminiAnalysis = MutableStateFlow(sharedPrefs.getBoolean("dashboard_show_gemini_analysis", true))
+    val showGeminiAnalysis: StateFlow<Boolean> = _showGeminiAnalysis.asStateFlow()
+
     private val _householdSize = MutableStateFlow(sharedPrefs.getInt("household_size", 10))
     val householdSize: StateFlow<Int> = _householdSize.asStateFlow()
 
@@ -921,6 +964,38 @@ class OperationsViewModel(
         _whyStatement.value = text
     }
 
+    fun saveGoalName(name: String) {
+        sharedPrefs.edit().putString("goal_name", name).apply()
+        _goalName.value = name
+    }
+
+    fun saveGoalTargetDate(dateStr: String) {
+        sharedPrefs.edit().putString("goal_target_date", dateStr).apply()
+        _goalTargetDate.value = dateStr
+    }
+
+    fun selectCalendarDate(dateStr: String) {
+        _selectedCalendarDate.value = dateStr
+    }
+
+    fun setCalendarViewMode(mode: String) {
+        _calendarViewMode.value = mode
+    }
+
+    fun setDashboardSectionVisible(sectionKey: String, visible: Boolean) {
+        sharedPrefs.edit().putBoolean(sectionKey, visible).apply()
+        when (sectionKey) {
+            "dashboard_show_alerts" -> _showAlerts.value = visible
+            "dashboard_show_countdown" -> _showCountdown.value = visible
+            "dashboard_show_weekly_preview" -> _showWeeklyPreview.value = visible
+            "dashboard_show_affirmation" -> _showAffirmation.value = visible
+            "dashboard_show_gratitude" -> _showGratitude.value = visible
+            "dashboard_show_favorites" -> _showFavorites.value = visible
+            "dashboard_show_secondary_grid" -> _showSecondaryGrid.value = visible
+            "dashboard_show_gemini_analysis" -> _showGeminiAnalysis.value = visible
+        }
+    }
+
     // --- Pelvic Tension Checks ---
     fun savePelvicTensionCheck(weekStartDate: String, tensionReported: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -1207,6 +1282,158 @@ class OperationsViewModel(
                 }
             } finally {
                 _isLoadingAnalysis.value = false
+            }
+        }
+    }
+
+    // --- Chantier Actions ---
+    fun addChantier(
+        name: String,
+        location: String,
+        startDate: String,
+        targetEndDate: String,
+        progressPercent: Int,
+        budgetTotal: Float,
+        budgetSpent: Float,
+        status: String,
+        notes: String,
+        onComplete: ((Long) -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val chantier = Chantier(
+                name = name,
+                location = location,
+                startDate = startDate,
+                targetEndDate = targetEndDate,
+                progressPercent = progressPercent,
+                budgetTotal = budgetTotal,
+                budgetSpent = budgetSpent,
+                status = status,
+                notes = notes
+            )
+            val newId = repository.insertChantier(chantier)
+            withContext(Dispatchers.Main) {
+                onComplete?.invoke(newId)
+            }
+        }
+    }
+
+    fun updateChantier(chantier: Chantier) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateChantier(chantier)
+        }
+    }
+
+    fun deleteChantierById(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteChantierById(id)
+        }
+    }
+
+    // Milestones
+    fun getMilestonesForChantierFlow(chantierId: Long): Flow<List<ChantierMilestone>> = repository.getMilestonesForChantierFlow(chantierId)
+
+    fun addMilestone(chantierId: Long, name: String, targetDate: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val milestone = ChantierMilestone(
+                chantierId = chantierId,
+                name = name,
+                targetDate = targetDate,
+                completed = false
+            )
+            repository.insertMilestone(milestone)
+        }
+    }
+
+    fun updateMilestone(milestone: ChantierMilestone) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateMilestone(milestone)
+        }
+    }
+
+    fun deleteMilestoneById(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteMilestoneById(id)
+        }
+    }
+
+    // Incidents
+    fun getIncidentsForChantierFlow(chantierId: Long): Flow<List<ChantierIncident>> = repository.getIncidentsForChantierFlow(chantierId)
+
+    fun addIncident(chantierId: Long, date: String, description: String, severity: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val incident = ChantierIncident(
+                chantierId = chantierId,
+                date = date,
+                description = description,
+                severity = severity
+            )
+            repository.insertIncident(incident)
+        }
+    }
+
+    fun deleteIncidentById(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteIncidentById(id)
+        }
+    }
+
+    // Helper functions for Ritual Page toggling
+    fun toggleStretchingDone(date: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentLog = repository.getSleepLogByDate(date) ?: SleepLog(
+                date = date,
+                bedtime = "23:00",
+                waketime = "07:00",
+                durationHours = 8.0f
+            )
+            val updatedLog = currentLog.copy(stretchingDone = !currentLog.stretchingDone)
+            repository.insertSleepLog(updatedLog)
+        }
+    }
+
+    fun toggleScreensOffBeforeBed(date: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentLog = repository.getSleepLogByDate(date) ?: SleepLog(
+                date = date,
+                bedtime = "23:00",
+                waketime = "07:00",
+                durationHours = 8.0f
+            )
+            val updatedLog = currentLog.copy(screensOffBeforeBed = !currentLog.screensOffBeforeBed)
+            repository.insertSleepLog(updatedLog)
+        }
+    }
+
+    fun toggleTobaccoUsed(date: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentLog = repository.getCardioHealthLogByDate(date) ?: CardioHealthLog(date = date)
+            val updatedLog = currentLog.copy(tobaccoUsed = !currentLog.tobaccoUsed)
+            repository.insertCardioHealthLog(updatedLog)
+        }
+    }
+
+    fun toggleBreathingDone(date: String, durationSeconds: Int = 300) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val sessions = breathingSessions.value.filter { it.date == date }
+            if (sessions.isNotEmpty()) {
+                repository.deleteBreathingSessionsByDate(date)
+            } else {
+                val session = BreathingSession(date = date, durationSeconds = durationSeconds)
+                repository.insertBreathingSession(session)
+            }
+        }
+    }
+
+    fun deleteGymSessionByDateAndType(date: String, isCardio: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val sessions = gymSessions.value.filter { it.date == date }
+            val targetSession = sessions.find { 
+                val matchesCardio = it.muscleGroups.contains("Cardio", ignoreCase = true)
+                if (isCardio) matchesCardio else !matchesCardio
+            }
+            if (targetSession != null) {
+                repository.deleteGymSessionById(targetSession.id)
             }
         }
     }

@@ -184,6 +184,38 @@ data class SurvivalStockItem(
     val storageMethod: String
 )
 
+@Entity(tableName = "chantiers")
+data class Chantier(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val location: String = "",
+    val startDate: String, // "YYYY-MM-DD"
+    val targetEndDate: String, // "YYYY-MM-DD"
+    val progressPercent: Int = 0, // 0-100, saisi manuellement
+    val budgetTotal: Float = 0f,
+    val budgetSpent: Float = 0f,
+    val status: String = "En cours", // "En cours", "En retard", "En pause", "Terminé"
+    val notes: String = ""
+)
+
+@Entity(tableName = "chantier_milestones")
+data class ChantierMilestone(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val chantierId: Long,
+    val name: String,
+    val targetDate: String, // "YYYY-MM-DD"
+    val completed: Boolean = false
+)
+
+@Entity(tableName = "chantier_incidents")
+data class ChantierIncident(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val chantierId: Long,
+    val date: String, // "YYYY-MM-DD"
+    val description: String,
+    val severity: String // "Mineur", "Majeur", "Critique"
+)
+
 
 
 // --- Room DAOs ---
@@ -300,6 +332,9 @@ interface BreathingSessionDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBreathingSession(session: BreathingSession)
+
+    @Query("DELETE FROM breathing_sessions WHERE date = :date")
+    suspend fun deleteBreathingSessionsByDate(date: String)
 
     @Query("DELETE FROM breathing_sessions")
     suspend fun deleteAllBreathingSessions()
@@ -497,6 +532,78 @@ interface GratitudeLogDao {
     suspend fun deleteAllGratitudeLogs()
 }
 
+@Dao
+interface ChantierDao {
+    @Query("SELECT * FROM chantiers ORDER BY id DESC")
+    fun getAllChantiersFlow(): Flow<List<Chantier>>
+
+    @Query("SELECT * FROM chantiers WHERE id = :id LIMIT 1")
+    fun getChantierByIdFlow(id: Long): Flow<Chantier?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChantier(chantier: Chantier): Long
+
+    @Update
+    suspend fun updateChantier(chantier: Chantier)
+
+    @Query("DELETE FROM chantiers WHERE id = :id")
+    suspend fun deleteChantierById(id: Long)
+
+    @Query("DELETE FROM chantiers")
+    suspend fun deleteAllChantiers()
+}
+
+@Dao
+interface ChantierMilestoneDao {
+    @Query("SELECT * FROM chantier_milestones")
+    fun getAllMilestonesFlow(): Flow<List<ChantierMilestone>>
+
+    @Query("SELECT * FROM chantier_milestones WHERE chantierId = :chantierId ORDER BY targetDate ASC")
+    fun getMilestonesForChantierFlow(chantierId: Long): Flow<List<ChantierMilestone>>
+
+    @Query("SELECT * FROM chantier_milestones WHERE chantierId = :chantierId ORDER BY targetDate ASC")
+    suspend fun getMilestonesForChantier(chantierId: Long): List<ChantierMilestone>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMilestone(milestone: ChantierMilestone)
+
+    @Update
+    suspend fun updateMilestone(milestone: ChantierMilestone)
+
+    @Query("DELETE FROM chantier_milestones WHERE id = :id")
+    suspend fun deleteMilestoneById(id: Long)
+
+    @Query("DELETE FROM chantier_milestones WHERE chantierId = :chantierId")
+    suspend fun deleteMilestonesForChantier(chantierId: Long)
+
+    @Query("DELETE FROM chantier_milestones")
+    suspend fun deleteAllMilestones()
+}
+
+@Dao
+interface ChantierIncidentDao {
+    @Query("SELECT * FROM chantier_incidents WHERE chantierId = :chantierId ORDER BY date DESC, id DESC")
+    fun getIncidentsForChantierFlow(chantierId: Long): Flow<List<ChantierIncident>>
+
+    @Query("SELECT * FROM chantier_incidents WHERE chantierId = :chantierId ORDER BY date DESC, id DESC")
+    suspend fun getIncidentsForChantier(chantierId: Long): List<ChantierIncident>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertIncident(incident: ChantierIncident)
+
+    @Update
+    suspend fun updateIncident(incident: ChantierIncident)
+
+    @Query("DELETE FROM chantier_incidents WHERE id = :id")
+    suspend fun deleteIncidentById(id: Long)
+
+    @Query("DELETE FROM chantier_incidents WHERE chantierId = :chantierId")
+    suspend fun deleteIncidentsForChantier(chantierId: Long)
+
+    @Query("DELETE FROM chantier_incidents")
+    suspend fun deleteAllIncidents()
+}
+
 
 // --- Room Database ---
 
@@ -521,9 +628,12 @@ interface GratitudeLogDao {
         MorningErectionLog::class,
         RestDay::class,
         DailyWin::class,
-        GratitudeLog::class
+        GratitudeLog::class,
+        Chantier::class,
+        ChantierMilestone::class,
+        ChantierIncident::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -547,6 +657,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun restDayDao(): RestDayDao
     abstract fun dailyWinDao(): DailyWinDao
     abstract fun gratitudeLogDao(): GratitudeLogDao
+    abstract fun chantierDao(): ChantierDao
+    abstract fun chantierMilestoneDao(): ChantierMilestoneDao
+    abstract fun chantierIncidentDao(): ChantierIncidentDao
 
     companion object {
         @Volatile

@@ -24,6 +24,8 @@ class OperationsRepository(private val db: AppDatabase) {
     val restDaysFlow: Flow<List<RestDay>> = db.restDayDao().getAllRestDaysFlow()
     val dailyWinsFlow: Flow<List<DailyWin>> = db.dailyWinDao().getAllDailyWinsFlow()
     val gratitudeLogsFlow: Flow<List<GratitudeLog>> = db.gratitudeLogDao().getAllGratitudeLogsFlow()
+    val chantiersFlow: Flow<List<Chantier>> = db.chantierDao().getAllChantiersFlow()
+    val allMilestonesFlow: Flow<List<ChantierMilestone>> = db.chantierMilestoneDao().getAllMilestonesFlow()
 
     fun getExercisesForSessionFlow(sessionId: Long): Flow<List<GymExercise>> = db.gymExerciseDao().getExercisesForSessionFlow(sessionId)
     suspend fun getExercisesForSession(sessionId: Long): List<GymExercise> = db.gymExerciseDao().getExercisesForSession(sessionId)
@@ -53,6 +55,7 @@ class OperationsRepository(private val db: AppDatabase) {
 
     // Breathing Sessions
     suspend fun insertBreathingSession(session: BreathingSession) = db.breathingSessionDao().insertBreathingSession(session)
+    suspend fun deleteBreathingSessionsByDate(date: String) = db.breathingSessionDao().deleteBreathingSessionsByDate(date)
 
     // Journal Entries
     suspend fun getJournalEntryByDate(date: String): JournalEntry? = db.journalEntryDao().getJournalEntryByDate(date)
@@ -107,6 +110,30 @@ class OperationsRepository(private val db: AppDatabase) {
     suspend fun getGratitudeLogByDate(date: String): GratitudeLog? = db.gratitudeLogDao().getGratitudeLogByDate(date)
     suspend fun insertGratitudeLog(log: GratitudeLog) = db.gratitudeLogDao().insertGratitudeLog(log)
 
+    // Chantiers
+    fun getChantierByIdFlow(id: Long): Flow<Chantier?> = db.chantierDao().getChantierByIdFlow(id)
+    suspend fun insertChantier(chantier: Chantier): Long = db.chantierDao().insertChantier(chantier)
+    suspend fun updateChantier(chantier: Chantier) = db.chantierDao().updateChantier(chantier)
+    suspend fun deleteChantierById(id: Long) {
+        db.chantierDao().deleteChantierById(id)
+        db.chantierMilestoneDao().deleteMilestonesForChantier(id)
+        db.chantierIncidentDao().deleteIncidentsForChantier(id)
+    }
+
+    // Milestones
+    fun getMilestonesForChantierFlow(chantierId: Long): Flow<List<ChantierMilestone>> = db.chantierMilestoneDao().getMilestonesForChantierFlow(chantierId)
+    suspend fun getMilestonesForChantier(chantierId: Long): List<ChantierMilestone> = db.chantierMilestoneDao().getMilestonesForChantier(chantierId)
+    suspend fun insertMilestone(milestone: ChantierMilestone) = db.chantierMilestoneDao().insertMilestone(milestone)
+    suspend fun updateMilestone(milestone: ChantierMilestone) = db.chantierMilestoneDao().updateMilestone(milestone)
+    suspend fun deleteMilestoneById(id: Long) = db.chantierMilestoneDao().deleteMilestoneById(id)
+
+    // Incidents
+    fun getIncidentsForChantierFlow(chantierId: Long): Flow<List<ChantierIncident>> = db.chantierIncidentDao().getIncidentsForChantierFlow(chantierId)
+    suspend fun getIncidentsForChantier(chantierId: Long): List<ChantierIncident> = db.chantierIncidentDao().getIncidentsForChantier(chantierId)
+    suspend fun insertIncident(incident: ChantierIncident) = db.chantierIncidentDao().insertIncident(incident)
+    suspend fun updateIncident(incident: ChantierIncident) = db.chantierIncidentDao().updateIncident(incident)
+    suspend fun deleteIncidentById(id: Long) = db.chantierIncidentDao().deleteIncidentById(id)
+
     // Clear all data (Full Reset)
     suspend fun clearAllData() {
         db.taskDao().deleteAllTasks()
@@ -129,5 +156,8 @@ class OperationsRepository(private val db: AppDatabase) {
         db.restDayDao().deleteAllRestDays()
         db.dailyWinDao().deleteAllDailyWins()
         db.gratitudeLogDao().deleteAllGratitudeLogs()
+        db.chantierDao().deleteAllChantiers()
+        db.chantierMilestoneDao().deleteAllMilestones()
+        db.chantierIncidentDao().deleteAllIncidents()
     }
 }

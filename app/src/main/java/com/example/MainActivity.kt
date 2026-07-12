@@ -314,11 +314,14 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
 
     val navItems = remember {
         listOf(
+            NavigationItem("Rituel", Icons.Filled.Checklist, Icons.Outlined.Checklist, 16),
+            NavigationItem("Mes Streaks", Icons.Filled.LocalFireDepartment, Icons.Outlined.LocalFireDepartment, 17),
             NavigationItem("Dashboard", Icons.Filled.GridView, Icons.Outlined.GridView, 0),
             NavigationItem("Pourquoi", Icons.Filled.Favorite, Icons.Outlined.Favorite, 11),
             NavigationItem("Affirmations", Icons.Filled.SelfImprovement, Icons.Outlined.SelfImprovement, 12),
             NavigationItem("To-Do List", Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle, 1),
             NavigationItem("Calendrier", Icons.Filled.DateRange, Icons.Outlined.DateRange, 2),
+            NavigationItem("Chantiers", Icons.Filled.Construction, Icons.Outlined.Construction, 15),
             NavigationItem("Compléments", Icons.Filled.LocalPharmacy, Icons.Outlined.LocalPharmacy, 3),
             NavigationItem("GYM", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter, 4),
             NavigationItem("Récupération", Icons.Filled.FlashOn, Icons.Outlined.FlashOn, 5),
@@ -430,6 +433,14 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                     label = "PageTransition"
                 ) { targetIndex ->
                     when (targetIndex) {
+                        16 -> RitualPage(viewModel, onNavigateToPage = {
+                            selectedPageIndex = it
+                            isSidebarOpen = false
+                        })
+                        17 -> StreaksOverviewPage(viewModel, onNavigateToPage = {
+                            selectedPageIndex = it
+                            isSidebarOpen = false
+                        })
                         0 -> DashboardPage(viewModel, onNavigateToPage = { 
                             selectedPageIndex = it 
                             isSidebarOpen = false
@@ -438,6 +449,7 @@ fun MainAppLayout(viewModel: OperationsViewModel) {
                         12 -> AffirmationsPage(viewModel)
                         1 -> TodoListPage(viewModel)
                         2 -> CalendrierPage(viewModel)
+                        15 -> ChantiersPage(viewModel)
                         3 -> ComplementsPage(viewModel)
                         4 -> GymPage(viewModel)
                         5 -> RecoveryPage(viewModel)

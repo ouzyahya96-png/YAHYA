@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,8 +52,12 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import android.content.Context
 import com.example.data.*
 import com.example.ui.theme.*
@@ -156,10 +161,31 @@ fun PageHeader(
 }
 
 
+data class AppPageInfo(
+    val title: String,
+    val index: Int,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val category: String
+)
+
+
 // --- SCREEN 1: DASHBOARD ---
 
 @Composable
 fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Unit) {
+    val showAlertsOption by viewModel.showAlerts.collectAsState()
+    val showCountdownOption by viewModel.showCountdown.collectAsState()
+    val showWeeklyPreviewOption by viewModel.showWeeklyPreview.collectAsState()
+    val showAffirmationOption by viewModel.showAffirmation.collectAsState()
+    val showGratitudeOption by viewModel.showGratitude.collectAsState()
+    val showFavoritesOption by viewModel.showFavorites.collectAsState()
+    val showSecondaryGridOption by viewModel.showSecondaryGrid.collectAsState()
+    val showGeminiAnalysisOption by viewModel.showGeminiAnalysis.collectAsState()
+
+    val currentHour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    val adaptiveGradient = remember(currentHour) { com.example.ui.theme.getTimeAdaptiveGradient(currentHour) }
+    val haptic = LocalHapticFeedback.current
+
     val tasks by viewModel.tasks.collectAsState()
     val gymSessions by viewModel.gymSessions.collectAsState()
     val supplementLogs by viewModel.supplementLogs.collectAsState()
@@ -170,12 +196,29 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
     val dailyWins by viewModel.dailyWins.collectAsState()
     val whyStatement by viewModel.whyStatement.collectAsState()
 
+    val chantiers by viewModel.chantiers.collectAsState()
+    val allMilestones by viewModel.allMilestones.collectAsState()
+    val pelvicTensionChecks by viewModel.pelvicTensionChecks.collectAsState()
+    val goalName by viewModel.goalName.collectAsState()
+    val goalTargetDate by viewModel.goalTargetDate.collectAsState()
+
     val geminiAnalysis by viewModel.geminiAnalysis.collectAsState()
     val geminiAnalysisDate by viewModel.geminiAnalysisDate.collectAsState()
     val isAnalysisOffline by viewModel.isAnalysisOffline.collectAsState()
     val isLoadingAnalysis by viewModel.isLoadingAnalysis.collectAsState()
     val analysisError by viewModel.analysisError.collectAsState()
     val hasApiKey = viewModel.geminiApiKey.collectAsState().value.isNotEmpty()
+
+    // Additional collected states for DailyRitualAggregator
+    val kegelLogs by viewModel.kegelLogs.collectAsState()
+    val breathingSessions by viewModel.breathingSessions.collectAsState()
+    val journalEntries by viewModel.journalEntries.collectAsState()
+    val sunExposureLogs by viewModel.sunExposureLogs.collectAsState()
+    val communicationPracticeLogs by viewModel.communicationPracticeLogs.collectAsState()
+    val delayTrainingLogs by viewModel.delayTrainingLogs.collectAsState()
+    val cardioHealthLogs by viewModel.cardioHealthLogs.collectAsState()
+    val morningErectionLogs by viewModel.morningErectionLogs.collectAsState()
+    val gratitudeLogs by viewModel.gratitudeLogs.collectAsState()
 
     val todayStr = viewModel.getTodayDate()
     val isRestDayActive = restDays.any { it.date == todayStr && it.active }
@@ -194,6 +237,241 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
 
     val lastNightSleep = sleepLogs.firstOrNull() // Chronological desc, so first is most recent
 
+    // Compute ritual completion
+    val ritualPlan = remember(
+        todayStr, tasks, gymSessions, supplementLogs, kegelLogs, breathingSessions,
+        journalEntries, sleepLogs, sunExposureLogs, communicationPracticeLogs,
+        delayTrainingLogs, cardioHealthLogs, morningErectionLogs, dailyWins,
+        gratitudeLogs, dailyAffirmation
+    ) {
+        com.example.data.DailyRitualAggregator.buildTodayRitual(viewModel, todayStr)
+    }
+
+    // Deterministic daily items
+    val deterministicAffirmation = remember(todayStr) {
+        com.example.data.AffirmationsData.getDailyDeterministicItem(com.example.data.AffirmationsData.affirmations, todayStr, 0)
+    }
+    val deterministicConfidence = remember(todayStr) {
+        com.example.data.AffirmationsData.getDailyDeterministicItem(com.example.data.AffirmationsData.confidenceStatements, todayStr, 1)
+    }
+
+    // Greeting calculations
+    val greeting = remember {
+        val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        when {
+            currentHour in 5..11 -> "Bonjour"
+            currentHour in 12..17 -> "Bon après-midi"
+            else -> "Bonsoir"
+        }
+    }
+    val formattedDate = remember {
+        try {
+            val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(todayStr) ?: Date()
+            SimpleDateFormat("EEEE d MMMM", Locale.FRANCE).format(date).replaceFirstChar { it.uppercase() }
+        } catch (e: Exception) {
+            SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(Date())
+        }
+    }
+
+    // Gratitude States
+    val todayGratitude = remember(gratitudeLogs, todayStr) {
+        gratitudeLogs.find { it.date == todayStr }
+    }
+    val isGratitudeFilled = todayGratitude != null &&
+            todayGratitude.gratitude1.isNotEmpty() &&
+            todayGratitude.gratitude2.isNotEmpty() &&
+            todayGratitude.gratitude3.isNotEmpty()
+
+    var g1 by remember { mutableStateOf("") }
+    var g2 by remember { mutableStateOf("") }
+    var g3 by remember { mutableStateOf("") }
+    var showGratitudeAnimation by remember { mutableStateOf(false) }
+
+    // Initialize inputs when gratitude is saved or changed
+    LaunchedEffect(todayGratitude) {
+        if (todayGratitude != null) {
+            g1 = todayGratitude.gratitude1
+            g2 = todayGratitude.gratitude2
+            g3 = todayGratitude.gratitude3
+        } else {
+            g1 = ""
+            g2 = ""
+            g3 = ""
+        }
+    }
+
+    // Favorite Pages States
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("dashboard_prefs", android.content.Context.MODE_PRIVATE) }
+    var favoriteIndices by remember {
+        val saved = sharedPrefs.getString("dashboard_favorite_pages", null)
+        val parsed = if (saved != null) {
+            saved.split(",").mapNotNull { it.toIntOrNull() }
+        } else {
+            listOf(1, 2, 3, 4, 5, 15) // Defaults: Todo List, Calendrier, Compléments, GYM, Récupération, Chantiers
+        }
+        mutableStateOf(parsed)
+    }
+
+    var showFavoritesDialog by remember { mutableStateOf(false) }
+    var tempFavorites by remember { mutableStateOf(favoriteIndices) }
+    var showAllPages by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    // List of all pages with corresponding category and icons
+    val allPagesList = remember {
+        listOf(
+            // Santé & Récupération
+            AppPageInfo("Compléments", 3, Icons.Filled.LocalPharmacy, "Santé & Récupération"),
+            AppPageInfo("GYM", 4, Icons.Filled.FitnessCenter, "Santé & Récupération"),
+            AppPageInfo("Récupération", 5, Icons.Filled.FlashOn, "Santé & Récupération"),
+            AppPageInfo("Testostérone", 6, Icons.Filled.WbSunny, "Santé & Récupération"),
+            AppPageInfo("Sommeil", 8, Icons.Filled.NightsStay, "Santé & Récupération"),
+
+            // Croissance & Esprit
+            AppPageInfo("Communication", 7, Icons.Filled.Forum, "Croissance & Esprit"),
+            AppPageInfo("Leadership", 14, Icons.Filled.Groups, "Croissance & Esprit"),
+            AppPageInfo("Neurosciences", 13, Icons.Filled.Psychology, "Croissance & Esprit"),
+            AppPageInfo("Affirmations", 12, Icons.Filled.SelfImprovement, "Croissance & Esprit"),
+            AppPageInfo("Pourquoi", 11, Icons.Filled.Favorite, "Croissance & Esprit"),
+
+            // Organisation
+            AppPageInfo("To-Do List", 1, Icons.Filled.CheckCircle, "Organisation"),
+            AppPageInfo("Calendrier", 2, Icons.Filled.DateRange, "Organisation"),
+            AppPageInfo("Rituel", 16, Icons.Filled.Checklist, "Organisation"),
+            AppPageInfo("Mes Streaks", 17, Icons.Filled.LocalFireDepartment, "Organisation"),
+
+            // Professionnel & Système
+            AppPageInfo("Chantiers", 15, Icons.Filled.Construction, "Professionnel & Système"),
+            AppPageInfo("Survive The Great Reset", 9, Icons.Filled.Inventory2, "Professionnel & Système"),
+            AppPageInfo("Paramètres", 10, Icons.Filled.Settings, "Professionnel & Système")
+        )
+    }
+
+    var dismissedAlertsToday by remember(todayStr) {
+        val dismissedStr = sharedPrefs.getString("dismissed_alerts_$todayStr", "") ?: ""
+        mutableStateOf(dismissedStr.split(",").filter { it.isNotBlank() }.toSet())
+    }
+
+    val activeAlerts = remember(chantiers, allMilestones, pelvicTensionChecks, supplementLogs, kegelLogs, dismissedAlertsToday) {
+        com.example.data.PriorityAlertsEngine.getTopAlerts(viewModel)
+            .filter { it.alertId !in dismissedAlertsToday }
+            .take(2)
+    }
+
+    val daysRemaining = remember(todayStr, goalTargetDate) {
+        if (goalTargetDate.isBlank()) return@remember null
+        try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val todayVal = sdf.parse(todayStr)
+            val targetVal = sdf.parse(goalTargetDate)
+            if (todayVal != null && targetVal != null) {
+                val diffMs = targetVal.time - todayVal.time
+                (diffMs / (1000 * 60 * 60 * 24)).toInt()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    var showStreakMenu by remember { mutableStateOf(false) }
+    var showSleepQuickDialog by remember { mutableStateOf(false) }
+    var quickBedtime by remember(lastNightSleep) { mutableStateOf(lastNightSleep?.bedtime ?: "22:30") }
+    var quickWaketime by remember(lastNightSleep) { mutableStateOf(lastNightSleep?.waketime ?: "07:00") }
+
+    fun calculateSleepDuration(bedtime: String, waketime: String): Float {
+        try {
+            val bedParts = bedtime.split(":")
+            val wakeParts = waketime.split(":")
+            if (bedParts.size == 2 && wakeParts.size == 2) {
+                val bedH = bedParts[0].toIntOrNull() ?: 22
+                val bedM = bedParts[1].toIntOrNull() ?: 30
+                val wakeH = wakeParts[0].toIntOrNull() ?: 7
+                val wakeM = wakeParts[1].toIntOrNull() ?: 0
+                
+                var totalMin = (wakeH * 60 + wakeM) - (bedH * 60 + bedM)
+                if (totalMin < 0) {
+                    totalMin += 24 * 60
+                }
+                return totalMin / 60f
+            }
+        } catch (e: Exception) {}
+        return 8f
+    }
+
+    if (showSleepQuickDialog) {
+        AlertDialog(
+            onDismissRequest = { showSleepQuickDialog = false },
+            title = {
+                Text(
+                    text = "Sommeil de la nuit dernière 🌙",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Saisissez rapidement vos horaires de coucher et de réveil pour mettre à jour vos statistiques.",
+                        fontSize = 11.sp,
+                        color = MediumGray,
+                        lineHeight = 16.sp
+                    )
+                    
+                    OutlinedTextField(
+                        value = quickBedtime,
+                        onValueChange = { quickBedtime = it },
+                        label = { Text("Heure de coucher (ex: 22:30)", fontSize = 12.sp) },
+                        placeholder = { Text("hh:mm", fontSize = 11.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                        modifier = Modifier.fillMaxWidth().testTag("quick_sleep_bedtime_input")
+                    )
+
+                    OutlinedTextField(
+                        value = quickWaketime,
+                        onValueChange = { quickWaketime = it },
+                        label = { Text("Heure de réveil (ex: 07:00)", fontSize = 12.sp) },
+                        placeholder = { Text("hh:mm", fontSize = 11.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                        modifier = Modifier.fillMaxWidth().testTag("quick_sleep_waketime_input")
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val finalHours = calculateSleepDuration(quickBedtime, quickWaketime)
+                        viewModel.addSleepLog(
+                            bedtime = quickBedtime,
+                            waketime = quickWaketime,
+                            durationHours = finalHours,
+                            quality = 3,
+                            stretchingDone = false,
+                            screensOffBeforeBed = false
+                        )
+                        showSleepQuickDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = GoldClassic)
+                ) {
+                    Text("Enregistrer", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showSleepQuickDialog = false }
+                ) {
+                    Text("Annuler")
+                }
+            }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -201,36 +479,553 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(vertical = 16.dp)
     ) {
+        // a) En-tête + Pourquoi button
         item {
-            val formattedDate = SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(Date())
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 PageHeader(
-                    title = "Aujourd'hui",
+                    title = greeting,
                     subtitle = formattedDate
                 )
                 
-                TextButton(
-                    onClick = { onNavigateToPage(11) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = GoldClassic)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = { onNavigateToPage(11) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = GoldClassic)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = "Pourquoi",
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Mon Pourquoi", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    IconButton(
+                        onClick = { onNavigateToPage(10) },
+                        modifier = Modifier.size(36.dp).testTag("dashboard_customize_quick_access")
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Pourquoi",
-                            modifier = Modifier.size(14.dp)
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Personnaliser",
+                            tint = MediumGray,
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Mon Pourquoi", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
 
-        // --- MODE JOUR DE PAUSE TOGGLE & BANNER ---
+        // Priority Alerts Banner (up to 2 alerts)
+        if (showAlertsOption && activeAlerts.isNotEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    activeAlerts.forEach { alert ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFFFF8E1))
+                                .border(1.dp, Color(0xFFFFD54F), RoundedCornerShape(12.dp))
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Alert",
+                                    tint = Color(0xFFF57F17),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = alert.text,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF5D4037),
+                                        fontWeight = FontWeight.Medium,
+                                        lineHeight = 16.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    TextButton(
+                                        onClick = { onNavigateToPage(alert.sourcePageIndex) },
+                                        contentPadding = PaddingValues(0.dp),
+                                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF57F17)),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Text("Voir", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val newDismissed = dismissedAlertsToday + alert.alertId
+                                        sharedPrefs.edit().putString("dismissed_alerts_$todayStr", newDismissed.joinToString(",")).apply()
+                                        dismissedAlertsToday = newDismissed
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Fermer",
+                                        tint = Color(0xFF8D6E63),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // b) Ligne Hero (Streak de récupération + Sommeil de la nuit dernière)
+        item {
+            val currentRecoveryStreak = viewModel.calculateCurrentStreak()
+            var isStreakPressed by remember { mutableStateOf(false) }
+            val streakScale by animateFloatAsState(targetValue = if (isStreakPressed) 0.95f else 1f)
+            var showStreakMenu by remember { mutableStateOf(false) }
+
+            var isSleepPressed by remember { mutableStateOf(false) }
+            val sleepScale by animateFloatAsState(targetValue = if (isSleepPressed) 0.95f else 1f)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Recovery Streak
+                Box(modifier = Modifier.weight(1f)) {
+                    OperationsCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                scaleX = streakScale
+                                scaleY = streakScale
+                            }
+                            .pointerInput(todayStr) {
+                                detectTapGestures(
+                                    onPress = {
+                                        try {
+                                            isStreakPressed = true
+                                            awaitRelease()
+                                        } finally {
+                                            isStreakPressed = false
+                                        }
+                                    },
+                                    onTap = { onNavigateToPage(5) },
+                                    onLongPress = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showStreakMenu = true
+                                    }
+                                )
+                            },
+                        borderBrush = adaptiveGradient,
+                        borderWidth = 2.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Timeline,
+                                contentDescription = "Streak",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "STREAK RÉCUP",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "$currentRecoveryStreak Jours",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showStreakMenu,
+                        onDismissRequest = { showStreakMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (isRestDayActive) "Désactiver Mode Pause" else "Activer Mode Pause aujourd'hui") },
+                            onClick = {
+                                viewModel.toggleRestDay(todayStr)
+                                showStreakMenu = false
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        )
+                    }
+                }
+
+                // Last Night's Sleep
+                OperationsCard(
+                    modifier = Modifier
+                        .weight(1f)
+                        .graphicsLayer {
+                            scaleX = sleepScale
+                            scaleY = sleepScale
+                        }
+                        .pointerInput(todayStr) {
+                            detectTapGestures(
+                                onPress = {
+                                    try {
+                                        isSleepPressed = true
+                                        awaitRelease()
+                                    } finally {
+                                        isSleepPressed = false
+                                    }
+                                },
+                                onTap = { onNavigateToPage(8) },
+                                onLongPress = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showSleepQuickDialog = true
+                                }
+                            )
+                        },
+                    borderBrush = adaptiveGradient,
+                    borderWidth = 2.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NightsStay,
+                            contentDescription = "Sleep",
+                            tint = GoldClassic,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "DERNIÈRE NUIT",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldClassic,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val sleepText = if (lastNightSleep != null) {
+                            "${String.format("%.1f", lastNightSleep.durationHours)} h"
+                        } else {
+                            "-- h"
+                        }
+                        Text(
+                            text = sleepText,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                    }
+                }
+            }
+        }
+
+        // Countdown to Goal Personal Objective
+        if (showCountdownOption) {
+            item {
+                OperationsCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderBrush = adaptiveGradient,
+                    borderWidth = 2.dp
+                ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (daysRemaining != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            AnimatedCountText(
+                                value = maxOf(0, daysRemaining),
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Black,
+                                color = GoldClassic
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (daysRemaining == 1 || daysRemaining == 0) "jour" else "jours",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "avant $goalName",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MediumGray,
+                            textAlign = TextAlign.Center
+                        )
+                    } else {
+                        Text(
+                            text = "Configure ton objectif dans Paramètres pour voir ton compte à rebours ici.",
+                            fontSize = 12.sp,
+                            color = MediumGray,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { onNavigateToPage(10) },
+                            colors = ButtonDefaults.textButtonColors(contentColor = GoldClassic)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Paramètres",
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Configurer maintenant", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+        // c) Bannière Rituel
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(adaptiveGradient)
+                    .clickable { onNavigateToPage(16) }
+                    .padding(16.dp)
+                    .testTag("dashboard_view_ritual_button")
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Voir mon Rituel du jour 🕊️",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Progression actuelle : ${ritualPlan.completionPercent}% complété",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = "Voir le Rituel",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+
+        // d) Aperçu de la semaine
+        if (showWeeklyPreviewOption) {
+            item {
+                val todayWeekDays = remember(todayStr) {
+                val list = mutableListOf<Date>()
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
+                for (i in 0..6) {
+                    list.add(cal.time)
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                }
+                list
+            }
+
+            val sdfDb = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Aperçu de la semaine",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    todayWeekDays.forEach { date ->
+                        val dateStr = sdfDb.format(date)
+                        val dayLabel = SimpleDateFormat("EEE", Locale.FRANCE).format(date).replaceFirstChar { it.uppercase() }
+                        val dayNum = SimpleDateFormat("d", Locale.getDefault()).format(date)
+                        val isToday = dateStr == todayStr
+
+                        val tasksCount = tasks.count { it.date == dateStr }
+                        val gymCount = gymSessions.count { it.date == dateStr }
+                        val milestonesCount = allMilestones.count { it.targetDate == dateStr && !it.completed }
+
+                        OperationsCard(
+                            modifier = Modifier
+                                .width(88.dp)
+                                .clickable {
+                                    viewModel.selectCalendarDate(dateStr)
+                                    viewModel.setCalendarViewMode("Jour")
+                                    onNavigateToPage(2)
+                                },
+                            borderBrush = if (isToday) GradientTokens.sunsetHorizontal else null,
+                            borderWidth = if (isToday) 1.5.dp else 1.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(if (isToday) LightBeige.copy(alpha = 0.3f) else Color.Transparent)
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = dayLabel,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isToday) GoldClassic else MediumGray
+                                )
+                                Text(
+                                    text = dayNum,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Anthracite
+                                )
+
+                                Divider(color = LightGrayDivider.copy(alpha = 0.5f))
+
+                                // Density indicators
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalAlignment = Alignment.Start
+                                ) {
+                                    // Tasks Indicator
+                                    if (tasksCount > 0) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = "Tâches",
+                                                tint = GoldClassic,
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                            Text(
+                                                text = "$tasksCount",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Anthracite
+                                            )
+                                        }
+                                    }
+
+                                    // Gym Indicator
+                                    if (gymCount > 0) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.FitnessCenter,
+                                                contentDescription = "GYM",
+                                                tint = Color(0xFF2E7D32),
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                            Text(
+                                                text = "$gymCount",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Anthracite
+                                            )
+                                        }
+                                    }
+
+                                    // Milestones Indicator
+                                    if (milestonesCount > 0) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Flag,
+                                                contentDescription = "Jalons",
+                                                tint = Color(0xFFC62828),
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                            Text(
+                                                text = "$milestonesCount",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Anthracite
+                                            )
+                                        }
+                                    }
+
+                                    // Placeholder if empty
+                                    if (tasksCount == 0 && gymCount == 0 && milestonesCount == 0) {
+                                        Text(
+                                            text = "Vide",
+                                            fontSize = 9.sp,
+                                            color = MediumGray.copy(alpha = 0.6f),
+                                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+        // MODE JOUR DE PAUSE TOGGLE & BANNER
         item {
             Row(
                 modifier = Modifier
@@ -288,45 +1083,728 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
             }
         }
 
-        // --- ENCART AFFIRMATION DU JOUR ---
-        item {
-            OperationsCard(borderAccent = true) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+        // d) Carte double — Affirmation & Confiance du jour
+        if (showAffirmationOption) {
+            item {
+                OperationsCard(borderBrush = adaptiveGradient, borderWidth = 1.5.dp) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Affirmation",
-                            tint = GoldClassic,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
+                    // General Affirmation Block
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = "Affirmation",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "AFFIRMATION DU JOUR",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "AFFIRMATION DU JOUR",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldClassic,
-                            letterSpacing = 1.sp
+                            text = "« $deterministicAffirmation »",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontStyle = FontStyle.Italic,
+                            color = Anthracite,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "« $dailyAffirmation »",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                        color = Anthracite,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
+
+                    Divider(color = LightGrayDivider, thickness = 1.dp)
+
+                    // Confidence Block
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SelfImprovement,
+                                contentDescription = "Confiance",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "CONFIANCE EN SOI DU JOUR",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldClassic,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "« $deterministicConfidence »",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontStyle = FontStyle.Italic,
+                            color = Anthracite,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+        // e) Gratitude rapide
+        if (showGratitudeOption) {
+            item {
+                OperationsCard(borderAccent = false) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.EmojiEvents,
+                                    contentDescription = "Gratitude",
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Gratitude du jour ✨",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Anthracite
+                                )
+                            }
+                            
+                            if (isGratitudeFilled) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Rempli",
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        if (isGratitudeFilled) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AnimatedVisibility(
+                                    visible = showGratitudeAnimation || isGratitudeFilled,
+                                    enter = fadeIn() + expandVertically()
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Check, contentDescription = null, tint = GoldClassic, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(g1, fontSize = 12.sp, color = Anthracite, fontWeight = FontWeight.Medium)
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Check, contentDescription = null, tint = GoldClassic, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(g2, fontSize = 12.sp, color = Anthracite, fontWeight = FontWeight.Medium)
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Check, contentDescription = null, tint = GoldClassic, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(g3, fontSize = 12.sp, color = Anthracite, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
+                                }
+                                
+                                if (showGratitudeAnimation) {
+                                    Text(
+                                        text = "Félicitations pour vos gratitudes quotidiennes ! 🎉",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GoldClassic,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = g1,
+                                    onValueChange = { g1 = it },
+                                    placeholder = { Text("1. Première gratitude...", fontSize = 11.sp, color = MediumGray) },
+                                    modifier = Modifier.fillMaxWidth().testTag("fast_gratitude_1"),
+                                    singleLine = true,
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+                                    colors = TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = GoldClassic,
+                                        unfocusedIndicatorColor = LightGrayDivider
+                                    )
+                                )
+                                OutlinedTextField(
+                                    value = g2,
+                                    onValueChange = { g2 = it },
+                                    placeholder = { Text("2. Deuxième gratitude...", fontSize = 11.sp, color = MediumGray) },
+                                    modifier = Modifier.fillMaxWidth().testTag("fast_gratitude_2"),
+                                    singleLine = true,
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+                                    colors = TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = GoldClassic,
+                                        unfocusedIndicatorColor = LightGrayDivider
+                                    )
+                                )
+                                OutlinedTextField(
+                                    value = g3,
+                                    onValueChange = { g3 = it },
+                                    placeholder = { Text("3. Troisième gratitude...", fontSize = 11.sp, color = MediumGray) },
+                                    modifier = Modifier.fillMaxWidth().testTag("fast_gratitude_3"),
+                                    singleLine = true,
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+                                    colors = TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = GoldClassic,
+                                        unfocusedIndicatorColor = LightGrayDivider
+                                    )
+                                )
+
+                                Button(
+                                    onClick = {
+                                        if (g1.isNotEmpty() && g2.isNotEmpty() && g3.isNotEmpty()) {
+                                            viewModel.saveGratitude(todayStr, g1, g2, g3)
+                                            showGratitudeAnimation = true
+                                        }
+                                    },
+                                    enabled = g1.isNotEmpty() && g2.isNotEmpty() && g3.isNotEmpty(),
+                                    modifier = Modifier.fillMaxWidth().height(36.dp).testTag("save_fast_gratitude"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldClassic, disabledContainerColor = LightGrayDivider),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("Enregistrer mes gratitudes", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // f) Accès Rapide — Favoris + Toutes les pages
+        if (showFavoritesOption) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Favorites header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Mes Raccourcis (Appui long pour éditer) 📌",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Anthracite
+                        )
+                        
+                        IconButton(onClick = {
+                            tempFavorites = favoriteIndices
+                            showFavoritesDialog = true
+                        }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit", tint = GoldClassic, modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    // Favorites Horizontal Row
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(favoriteIndices) { pageIdx ->
+                            val pageInfo = allPagesList.find { it.index == pageIdx }
+                            if (pageInfo != null) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .width(68.dp)
+                                        .pointerInput(pageIdx) {
+                                            detectTapGestures(
+                                                onTap = { onNavigateToPage(pageInfo.index) },
+                                                onLongPress = {
+                                                    tempFavorites = favoriteIndices
+                                                    showFavoritesDialog = true
+                                                }
+                                            )
+                                        }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .background(LightBeige, CircleShape)
+                                            .border(1.dp, GoldClassic.copy(alpha = 0.5f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = pageInfo.icon,
+                                            contentDescription = pageInfo.title,
+                                            tint = GoldClassic,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = pageInfo.title,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Anthracite,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Toggle Collapsible Section Button
+                    TextButton(
+                        onClick = { showAllPages = !showAllPages },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = GoldClassic)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (showAllPages) "Masquer toutes les pages (18)" else "Voir toutes les pages (18)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = if (showAllPages) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Collapsible view
+                    AnimatedVisibility(
+                        visible = showAllPages,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(LightGrayBg.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                .border(1.dp, LightGrayDivider, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Search field
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Rechercher une page...", fontSize = 12.sp, color = MediumGray) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MediumGray, modifier = Modifier.size(18.dp)) },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White,
+                                    focusedIndicatorColor = GoldClassic,
+                                    unfocusedIndicatorColor = LightGrayDivider
+                                )
+                            )
+
+                            // Categorized lists
+                            val categories = listOf("Santé & Récupération", "Croissance & Esprit", "Organisation", "Professionnel & Système")
+                            val filteredPages = allPagesList.filter {
+                                searchQuery.isEmpty() || it.title.contains(searchQuery, ignoreCase = true)
+                            }
+
+                            categories.forEach { cat ->
+                                val pagesInCat = filteredPages.filter { it.category == cat }
+                                if (pagesInCat.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = cat,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = GoldClassic,
+                                            letterSpacing = 0.5.sp,
+                                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                                        )
+                                        pagesInCat.chunked(2).forEach { rowItems ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                rowItems.forEach { page ->
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .background(Color.White)
+                                                            .border(1.dp, LightGrayDivider, RoundedCornerShape(8.dp))
+                                                            .clickable { onNavigateToPage(page.index) }
+                                                            .padding(10.dp)
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = page.icon,
+                                                                contentDescription = page.title,
+                                                                tint = GoldClassic,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                            Text(
+                                                                text = page.title,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = Anthracite,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                if (rowItems.count() < 2) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // g) Grille secondaire d'informations du jour (Tâches restantes, séance GYM, compléments, sommeil)
+        if (showSecondaryGridOption) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // COL 1: Tâches en cours
+                    OperationsCard(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Tâches",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Anthracite
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .background(LightBeige, RoundedCornerShape(12.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "${remainingTasks.size} rest.",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GoldClassic
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (nextTask != null) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.clickable { onNavigateToPage(1) }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(GoldClassic, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column {
+                                        Text(
+                                            text = nextTask.title,
+                                            fontSize = 11.sp,
+                                            color = Anthracite,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (nextTask.time != null) {
+                                            Text(
+                                                text = "${nextTask.time}",
+                                                fontSize = 9.sp,
+                                                color = MediumGray
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "Toutes les tâches sont accomplies.",
+                                    fontSize = 11.sp,
+                                    color = MediumGray
+                                )
+                            }
+                        }
+                    }
+
+                    // COL 2: Séance GYM
+                    OperationsCard(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+                            Text(
+                                text = "Séance GYM",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (todayGymSession != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = todayGymSession.name,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Anthracite,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${todayGymSession.time} • ${todayGymSession.durationMinutes} min",
+                                            fontSize = 9.sp,
+                                            color = MediumGray
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.FitnessCenter,
+                                        contentDescription = "Gym",
+                                        tint = GoldClassic,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Repos",
+                                        fontSize = 11.sp,
+                                        color = MediumGray
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.Hotel,
+                                        contentDescription = "Rest",
+                                        tint = MediumGray,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // COL 3: Compléments
+                    OperationsCard(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Compléments",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Anthracite
+                                )
+                                Text(
+                                    text = "Voir tout",
+                                    fontSize = 10.sp,
+                                    color = GoldClassic,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.clickable { onNavigateToPage(3) }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            val takenTodayCount = listOf(
+                                todaySuppLog.creatine, todaySuppLog.omega3, todaySuppLog.magnesium,
+                                todaySuppLog.ashwagandha, todaySuppLog.tongkatAli, todaySuppLog.vitaminD3,
+                                todaySuppLog.zinc, todaySuppLog.lTheanine, todaySuppLog.boron, todaySuppLog.lCitrulline
+                            ).count { it }
+                            val progressPct = takenTodayCount / 10f
+
+                            Text(
+                                text = "$takenTodayCount/10 pris aujourd'hui",
+                                fontSize = 10.sp,
+                                color = MediumGray
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            GradientLinearProgressIndicator(
+                                progress = progressPct,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp),
+                                trackColor = LightGrayDivider,
+                                shape = RoundedCornerShape(2.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            val listSupps = listOf(
+                                "Créatine" to ("creatine" to todaySuppLog.creatine),
+                                "Oméga-3" to ("omega3" to todaySuppLog.omega3),
+                                "Magnésium" to ("magnesium" to todaySuppLog.magnesium),
+                                "Ashwa" to ("ashwagandha" to todaySuppLog.ashwagandha),
+                                "Tongkat" to ("tongkatAli" to todaySuppLog.tongkatAli)
+                            )
+
+                            listSupps.forEach { (label, data) ->
+                                val (key, taken) = data
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 1.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(text = label, fontSize = 11.sp, color = Anthracite)
+                                    PremiumCheckbox(
+                                        checked = taken,
+                                        onCheckedChange = { viewModel.toggleSupplement(key, it) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // COL 4: Sommeil
+                    OperationsCard(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+                            Text(
+                                text = "Sommeil",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (lastNightSleep != null) {
+                                val hours = lastNightSleep.durationHours
+                                val pct = (hours / 8f).coerceIn(0f, 1f)
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = "${String.format("%.1f", hours)}h",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Anthracite
+                                    )
+                                    Text(
+                                        text = "${lastNightSleep.bedtime} - ${lastNightSleep.waketime}",
+                                        fontSize = 9.sp,
+                                        color = MediumGray
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    GradientLinearProgressIndicator(
+                                        progress = pct,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(4.dp),
+                                        trackColor = LightGrayDivider,
+                                        shape = RoundedCornerShape(2.dp)
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Aucun sommeil enregistré.",
+                                    fontSize = 11.sp,
+                                    color = MediumGray
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -361,494 +1839,207 @@ fun DashboardPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Uni
             }
         }
 
-        // --- SECTION IA GEMINI ---
-        item {
-            OperationsCard(borderAccent = true) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = "Gemini",
-                                tint = GoldClassic,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "ANALYSE GEMINI DU JOUR",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldClassic,
-                                letterSpacing = 1.sp
-                            )
-                        }
-
-                        if (hasApiKey && !isLoadingAnalysis) {
-                            IconButton(
-                                onClick = { viewModel.generateGeminiAnalysis() },
-                                modifier = Modifier.size(24.dp).testTag("refresh_analysis")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Refresh",
-                                    tint = MediumGray,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    if (!hasApiKey) {
-                        Text(
-                            text = "Configurez votre clé API Gemini dans les Paramètres pour activer l'analyse quotidienne de vos indicateurs de performance.",
-                            fontSize = 13.sp,
-                            color = MediumGray
-                        )
-                    } else if (isLoadingAnalysis) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                        ) {
-                            SkeletonLoader(height = 18.dp)
-                            SkeletonLoader(height = 14.dp)
-                            SkeletonLoader(height = 14.dp)
-                            SkeletonLoader(height = 14.dp)
-                        }
-                    } else if (analysisError == "OFFLINE_NO_CACHE") {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.WifiOff,
-                                contentDescription = "Offline",
-                                tint = MediumGray.copy(alpha = 0.5f),
-                                modifier = Modifier.size(36.dp)
-                            )
-                            Text(
-                                text = "Connecte-toi à internet pour recevoir ta première analyse personnalisée.",
-                                fontSize = 13.sp,
-                                color = MediumGray,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    } else if (!analysisError.isNullOrEmpty()) {
-                        Text(
-                            text = "Un problème est survenu lors de l'analyse quotidienne. Veuillez réessayer plus tard.",
-                            fontSize = 13.sp,
-                            color = Color(0xFFC62828)
-                        )
-                    } else if (geminiAnalysis.isNotEmpty()) {
-                        Column {
-                            if (isAnalysisOffline) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.WifiOff,
-                                        contentDescription = "Offline",
-                                        tint = MediumGray,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Hors ligne — dernière analyse du $geminiAnalysisDate",
-                                        fontSize = 11.sp,
-                                        color = MediumGray,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            }
-                            Text(
-                                text = geminiAnalysis,
-                                fontSize = 14.sp,
-                                color = Anthracite,
-                                lineHeight = 20.sp
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = "Aucune analyse générée aujourd'hui. Cliquez sur le bouton de rafraîchissement pour lancer l'analyse croisée de vos données.",
-                            fontSize = 13.sp,
-                            color = MediumGray
-                        )
-                    }
-                }
-            }
-        }
-
-         // --- BLOC HERO : FATIGUE NERVEUSE ---
-        item {
-            val currentRecoveryStreak = viewModel.calculateCurrentStreak()
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Card 1: Recovery Streak
-                OperationsCard(
-                    modifier = Modifier.weight(1f),
-                    borderBrush = GradientTokens.sunsetHorizontal,
-                    borderWidth = 2.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Timeline,
-                            contentDescription = "Streak",
-                            tint = GoldClassic,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "STREAK RÉCUP",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldClassic,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "$currentRecoveryStreak Jours",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Anthracite
-                        )
-                    }
-                }
-
-                // Card 2: Last Night's Sleep
-                OperationsCard(
-                    modifier = Modifier.weight(1f),
-                    borderBrush = GradientTokens.sunsetHorizontal,
-                    borderWidth = 2.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.NightsStay,
-                            contentDescription = "Sleep",
-                            tint = GoldClassic,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "DERNIÈRE NUIT",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldClassic,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val sleepText = if (lastNightSleep != null) {
-                            "${String.format("%.1f", lastNightSleep.durationHours)} h"
-                        } else {
-                            "-- h"
-                        }
-                        Text(
-                            text = sleepText,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Anthracite
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- GRID SECONDAIRE À 2 COLONNES ---
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Max),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // COL 1: Tâches en cours
-                OperationsCard(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+        // h) Analyse Gemini du jour
+        if (showGeminiAnalysisOption) {
+            item {
+                OperationsCard(borderAccent = true) {
+                    Column(modifier = Modifier.padding(20.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Tâches",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Anthracite
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .background(LightBeige, RoundedCornerShape(12.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "${remainingTasks.size} rest.",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = GoldClassic
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = "Gemini",
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(18.dp)
                                 )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "ANALYSE GEMINI DU JOUR",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GoldClassic,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+
+                            if (hasApiKey && !isLoadingAnalysis) {
+                                IconButton(
+                                    onClick = { viewModel.generateGeminiAnalysis() },
+                                    modifier = Modifier.size(24.dp).testTag("refresh_analysis")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh",
+                                        tint = MediumGray,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        if (nextTask != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable { onNavigateToPage(1) }
+                        if (!hasApiKey) {
+                            Text(
+                                text = "Configurez votre clé API Gemini dans les Paramètres pour activer l'analyse quotidienne de vos indicateurs de performance.",
+                                fontSize = 13.sp,
+                                color = MediumGray
+                            )
+                        } else if (isLoadingAnalysis) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .background(GoldClassic, CircleShape)
+                                SkeletonLoader(height = 18.dp)
+                                SkeletonLoader(height = 14.dp)
+                                SkeletonLoader(height = 14.dp)
+                                SkeletonLoader(height = 14.dp)
+                            }
+                        } else if (analysisError == "OFFLINE_NO_CACHE") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.WifiOff,
+                                    contentDescription = "Offline",
+                                    tint = MediumGray.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(36.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Column {
-                                    Text(
-                                        text = nextTask.title,
-                                        fontSize = 11.sp,
-                                        color = Anthracite,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    if (nextTask.time != null) {
+                                Text(
+                                    text = "Connecte-toi à internet pour recevoir ta première analyse personnalisée.",
+                                    fontSize = 13.sp,
+                                    color = MediumGray,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        } else if (!analysisError.isNullOrEmpty()) {
+                            Text(
+                                text = "Un problème est survenu lors de l'analyse quotidienne. Veuillez réessayer plus tard.",
+                                fontSize = 13.sp,
+                                color = Color(0xFFC62828)
+                            )
+                        } else if (geminiAnalysis.isNotEmpty()) {
+                            Column {
+                                if (isAnalysisOffline) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.WifiOff,
+                                            contentDescription = "Offline",
+                                            tint = MediumGray,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "${nextTask.time}",
-                                            fontSize = 9.sp,
-                                            color = MediumGray
+                                            text = "Hors ligne — dernière analyse du $geminiAnalysisDate",
+                                            fontSize = 11.sp,
+                                            color = MediumGray,
+                                            fontWeight = FontWeight.Medium
                                         )
                                     }
                                 }
+                                Text(
+                                    text = geminiAnalysis,
+                                    fontSize = 14.sp,
+                                    color = Anthracite,
+                                    lineHeight = 20.sp
+                                )
                             }
                         } else {
                             Text(
-                                text = "Toutes les tâches sont accomplies.",
-                                fontSize = 11.sp,
+                                text = "Aucune analyse générée aujourd'hui. Cliquez sur le bouton de rafraîchissement pour lancer l'analyse croisée de vos données.",
+                                fontSize = 13.sp,
                                 color = MediumGray
                             )
                         }
                     }
                 }
-
-                // COL 2: Séance GYM
-                OperationsCard(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
-                        Text(
-                            text = "Séance GYM",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Anthracite
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        if (todayGymSession != null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = todayGymSession.name,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Anthracite,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${todayGymSession.time} • ${todayGymSession.durationMinutes} min",
-                                        fontSize = 9.sp,
-                                        color = MediumGray
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Default.FitnessCenter,
-                                    contentDescription = "Gym",
-                                    tint = GoldClassic,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Repos",
-                                    fontSize = 11.sp,
-                                    color = MediumGray
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.Hotel,
-                                    contentDescription = "Rest",
-                                    tint = MediumGray,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
+    }
 
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Max),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // COL 3: Compléments
-                OperationsCard(
-                    modifier = Modifier.weight(1f)
+    // Favorites Customization Dialog
+    if (showFavoritesDialog) {
+        AlertDialog(
+            onDismissRequest = { showFavoritesDialog = false },
+            title = { Text("Personnaliser mes raccourcis", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Anthracite) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
+                    Text("Sélectionnez jusqu'à 6 pages favorites à épingler en accès rapide :", fontSize = 12.sp, color = MediumGray)
+                    allPagesList.forEach { page ->
+                        val isSelected = tempFavorites.contains(page.index)
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Compléments",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Anthracite
-                            )
-                            Text(
-                                text = "Voir tout",
-                                fontSize = 10.sp,
-                                color = GoldClassic,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.clickable { onNavigateToPage(3) }
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        val takenTodayCount = listOf(
-                            todaySuppLog.creatine, todaySuppLog.omega3, todaySuppLog.magnesium,
-                            todaySuppLog.ashwagandha, todaySuppLog.tongkatAli, todaySuppLog.vitaminD3,
-                            todaySuppLog.zinc, todaySuppLog.lTheanine, todaySuppLog.boron, todaySuppLog.lCitrulline
-                        ).count { it }
-                        val progressPct = takenTodayCount / 10f
-
-                        Text(
-                            text = "$takenTodayCount/10 pris aujourd'hui",
-                            fontSize = 10.sp,
-                            color = MediumGray
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        GradientLinearProgressIndicator(
-                            progress = progressPct,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(4.dp),
-                            trackColor = LightGrayDivider,
-                            shape = RoundedCornerShape(2.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val listSupps = listOf(
-                            "Créatine" to ("creatine" to todaySuppLog.creatine),
-                            "Oméga-3" to ("omega3" to todaySuppLog.omega3),
-                            "Magnésium" to ("magnesium" to todaySuppLog.magnesium),
-                            "Ashwa" to ("ashwagandha" to todaySuppLog.ashwagandha),
-                            "Tongkat" to ("tongkatAli" to todaySuppLog.tongkatAli)
-                        )
-
-                        listSupps.forEach { (label, data) ->
-                            val (key, taken) = data
+                                .clickable {
+                                    if (isSelected) {
+                                        tempFavorites = tempFavorites - page.index
+                                    } else {
+                                        if (tempFavorites.size < 6) {
+                                            tempFavorites = tempFavorites + page.index
+                                        }
+                                    }
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 1.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(text = label, fontSize = 11.sp, color = Anthracite)
-                                PremiumCheckbox(
-                                    checked = taken,
-                                    onCheckedChange = { viewModel.toggleSupplement(key, it) }
-                                )
+                                Icon(imageVector = page.icon, contentDescription = null, tint = GoldClassic, modifier = Modifier.size(18.dp))
+                                Text(text = page.title, fontSize = 13.sp, color = Anthracite)
                             }
-                        }
-                    }
-                }
-
-                // COL 4: Sommeil
-                OperationsCard(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp).fillMaxHeight()) {
-                        Text(
-                            text = "Sommeil",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Anthracite
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        if (lastNightSleep != null) {
-                            val hours = lastNightSleep.durationHours
-                            val pct = (hours / 8f).coerceIn(0f, 1f)
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    text = "${String.format("%.1f", hours)}h",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Anthracite
-                                )
-                                Text(
-                                    text = "${lastNightSleep.bedtime} - ${lastNightSleep.waketime}",
-                                    fontSize = 9.sp,
-                                    color = MediumGray
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                GradientLinearProgressIndicator(
-                                    progress = pct,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(4.dp),
-                                    trackColor = LightGrayDivider,
-                                    shape = RoundedCornerShape(2.dp)
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = "Aucun sommeil enregistré.",
-                                fontSize = 11.sp,
-                                color = MediumGray
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { checked ->
+                                    if (!checked) {
+                                        tempFavorites = tempFavorites - page.index
+                                    } else {
+                                        if (tempFavorites.size < 6) {
+                                            tempFavorites = tempFavorites + page.index
+                                        }
+                                    }
+                                },
+                                colors = CheckboxDefaults.colors(checkedColor = GoldClassic)
                             )
                         }
                     }
                 }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        favoriteIndices = tempFavorites
+                        val savedString = tempFavorites.joinToString(",")
+                        sharedPrefs.edit().putString("dashboard_favorite_pages", savedString).apply()
+                        showFavoritesDialog = false
+                    }
+                ) {
+                    Text("Valider", fontWeight = FontWeight.Bold, color = GoldClassic)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFavoritesDialog = false }) {
+                    Text("Annuler", color = MediumGray)
+                }
             }
-        }
+        )
     }
 }
 
@@ -1323,16 +2514,21 @@ fun CalendrierPage(viewModel: OperationsViewModel) {
     val tasks by viewModel.tasks.collectAsState()
     val gymSessions by viewModel.gymSessions.collectAsState()
 
-    var viewMode by remember { mutableStateOf("Semaine") } // "Semaine", "Jour", "Mois"
-    var selectedDayStr by remember { mutableStateOf(viewModel.getTodayDate()) }
+    val viewMode by viewModel.calendarViewMode.collectAsState()
+    val selectedDayStr by viewModel.selectedCalendarDate.collectAsState()
 
     val calendar = remember { Calendar.getInstance() }
     var currentWeekStart by remember { mutableStateOf(Date()) }
 
-    // Initialize to current week start
-    LaunchedEffect(Unit) {
-        calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
-        currentWeekStart = calendar.time
+    // Align currentWeekStart with selectedDayStr
+    LaunchedEffect(selectedDayStr) {
+        try {
+            val dateObj = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(selectedDayStr) ?: Date()
+            val cal = Calendar.getInstance()
+            cal.time = dateObj
+            cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
+            currentWeekStart = cal.time
+        } catch (e: Exception) {}
     }
 
     val sdfDisplay = SimpleDateFormat("d MMMM yyyy", Locale.getDefault())
@@ -1411,7 +2607,7 @@ fun CalendrierPage(viewModel: OperationsViewModel) {
                     Box(
                         modifier = Modifier
                             .background(if (isSel) GoldClassic else Color.Transparent, RoundedCornerShape(10.dp))
-                            .clickable { viewMode = mode }
+                            .clickable { viewModel.setCalendarViewMode(mode) }
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
@@ -1447,8 +2643,8 @@ fun CalendrierPage(viewModel: OperationsViewModel) {
                 Column(
                     modifier = Modifier
                         .clickable {
-                            selectedDayStr = dateStr
-                            viewMode = "Jour"
+                            viewModel.selectCalendarDate(dateStr)
+                            viewModel.setCalendarViewMode("Jour")
                         }
                         .padding(4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -1537,8 +2733,8 @@ fun CalendrierPage(viewModel: OperationsViewModel) {
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable {
-                                    selectedDayStr = dateStr
-                                    viewMode = "Jour"
+                                    viewModel.selectCalendarDate(dateStr)
+                                    viewModel.setCalendarViewMode("Jour")
                                 }
                                 .padding(vertical = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -5400,6 +6596,8 @@ fun SettingsPage(viewModel: OperationsViewModel) {
     val notifsEnabled by viewModel.notificationsEnabled.collectAsState()
     val soundEnabled by viewModel.soundEnabled.collectAsState()
     val digestEnabled by viewModel.digestModeEnabled.collectAsState()
+    val goalName by viewModel.goalName.collectAsState()
+    val goalTargetDate by viewModel.goalTargetDate.collectAsState()
 
     var apiKeyInput by remember { mutableStateOf(apiKey) }
     var showApiKey by remember { mutableStateOf(false) }
@@ -5694,6 +6892,127 @@ fun SettingsPage(viewModel: OperationsViewModel) {
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Modifier", color = WhitePure, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // --- DASHBOARD CUSTOMIZATION CARD ---
+        val showAlerts by viewModel.showAlerts.collectAsState()
+        val showCountdown by viewModel.showCountdown.collectAsState()
+        val showWeeklyPreview by viewModel.showWeeklyPreview.collectAsState()
+        val showAffirmation by viewModel.showAffirmation.collectAsState()
+        val showGratitude by viewModel.showGratitude.collectAsState()
+        val showFavorites by viewModel.showFavorites.collectAsState()
+        val showSecondaryGrid by viewModel.showSecondaryGrid.collectAsState()
+        val showGeminiAnalysis by viewModel.showGeminiAnalysis.collectAsState()
+
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Personnaliser mon Dashboard", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                Text(
+                    text = "Activez ou désactivez les sections du tableau de bord pour un affichage sur mesure et épuré. La ligne Hero et la bannière rituel restent toujours visibles.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                Divider(color = LightGrayDivider)
+
+                val customSections = listOf(
+                    Triple("dashboard_show_alerts", "Alertes prioritaires", showAlerts),
+                    Triple("dashboard_show_countdown", "Compte à rebours de l'objectif", showCountdown),
+                    Triple("dashboard_show_weekly_preview", "Aperçu de la semaine", showWeeklyPreview),
+                    Triple("dashboard_show_affirmation", "Affirmation & Confiance", showAffirmation),
+                    Triple("dashboard_show_gratitude", "Journal de Gratitude", showGratitude),
+                    Triple("dashboard_show_favorites", "Raccourcis Favoris", showFavorites),
+                    Triple("dashboard_show_secondary_grid", "Indicateurs secondaires (grille)", showSecondaryGrid),
+                    Triple("dashboard_show_gemini_analysis", "Analyse d'intelligence Gemini", showGeminiAnalysis)
+                )
+
+                customSections.forEachIndexed { index, (key, title, isVisible) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = title, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Anthracite)
+                        Switch(
+                            checked = isVisible,
+                            onCheckedChange = { viewModel.setDashboardSectionVisible(key, it) },
+                            colors = SwitchDefaults.colors(checkedThumbColor = GoldClassic, checkedTrackColor = LightBeige),
+                            modifier = Modifier.testTag("switch_$key")
+                        )
+                    }
+                    if (index < customSections.lastIndex) {
+                        Divider(color = LightGrayDivider.copy(alpha = 0.5f))
+                    }
+                }
+            }
+        }
+
+        // --- COUNTDOWN GOAL CONFIG CARD ---
+        val goalContext = LocalContext.current
+        OperationsCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Objectif et Compte à Rebours", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                Text(
+                    text = "Configurez un objectif personnel (ex: mariage, compétition, événement) et sa date cible pour afficher un compte à rebours dynamique sur votre tableau de bord.",
+                    fontSize = 11.sp,
+                    color = MediumGray,
+                    lineHeight = 16.sp
+                )
+
+                OutlinedTextField(
+                    value = goalName,
+                    onValueChange = { viewModel.saveGoalName(it) },
+                    label = { Text("Nom de l'objectif", fontSize = 12.sp) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldClassic),
+                    modifier = Modifier.fillMaxWidth().testTag("goal_name_input")
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (goalTargetDate.isBlank()) "Aucune date configurée" else "Date cible : $goalTargetDate",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite
+                    )
+
+                    PremiumGradientButton(
+                        onClick = {
+                            val calendar = Calendar.getInstance()
+                            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            try {
+                                val d = sdf.parse(goalTargetDate)
+                                if (d != null) calendar.time = d
+                            } catch (e: Exception) {}
+
+                            android.app.DatePickerDialog(
+                                goalContext,
+                                { _, year, month, dayOfMonth ->
+                                    val newDate = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                                    viewModel.saveGoalTargetDate(newDate)
+                                },
+                                calendar.get(Calendar.YEAR),
+                                calendar.get(Calendar.MONTH),
+                                calendar.get(Calendar.DAY_OF_MONTH)
+                            ).show()
+                        },
+                        modifier = Modifier.testTag("select_goal_target_date"),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Modifier la date", color = WhitePure, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -12336,6 +13655,1896 @@ fun TabMossadLevel() {
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChantiersPage(viewModel: OperationsViewModel) {
+    val chantiers by viewModel.chantiers.collectAsState()
+    var selectedChantierId by remember { mutableStateOf<Long?>(null) }
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    if (selectedChantierId != null) {
+        ChantierDetailPage(
+            viewModel = viewModel,
+            chantierId = selectedChantierId!!,
+            onBack = { selectedChantierId = null }
+        )
+    } else {
+        Scaffold(
+            containerColor = WhitePure,
+            floatingActionButton = {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(GradientTokens.sunsetVertical)
+                        .clickable { showAddDialog = true }
+                        .testTag("add_chantier_fab"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = "Ajouter un chantier", tint = Color.White)
+                }
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                item {
+                    PageHeader(
+                        title = "Gestion des Chantiers",
+                        subtitle = "Suivi professionnel et budgétaire de vos opérations (Max 5 actifs)"
+                    )
+                }
+
+                if (chantiers.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(LightBeige, RoundedCornerShape(12.dp))
+                                .border(width = 0.5.dp, color = LightGrayDivider, shape = RoundedCornerShape(12.dp))
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Construction,
+                                    contentDescription = null,
+                                    tint = GoldClassic,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Text(
+                                    text = "Aucun chantier enregistré",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Anthracite
+                                )
+                                Text(
+                                    text = "Ajoutez votre premier chantier professionnel pour suivre les jalons, budgets et incidents.",
+                                    fontSize = 12.sp,
+                                    color = MediumGray,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 18.sp
+                                )
+                                Button(
+                                    onClick = { showAddDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Créer un chantier", color = Color.White, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(chantiers) { chantier ->
+                        ChantierCard(
+                            chantier = chantier,
+                            onClick = { selectedChantierId = chantier.id }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AddChantierDialog(
+            viewModel = viewModel,
+            activeCount = chantiers.count { it.status != "Terminé" },
+            onDismiss = { showAddDialog = false }
+        )
+    }
+}
+
+@Composable
+fun ChantierCard(
+    chantier: Chantier,
+    onClick: () -> Unit
+) {
+    val daysLeft = calculateDaysDifference(chantier.targetEndDate)
+    val isOverdue = daysLeft < 0 && chantier.status != "Terminé"
+
+    OperationsCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag("chantier_card_${chantier.id}")
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header: Name + Status Badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = chantier.name,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Anthracite,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (chantier.location.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Place,
+                                contentDescription = null,
+                                tint = MediumGray,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = chantier.location,
+                                fontSize = 12.sp,
+                                color = MediumGray,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+                StatusBadge(status = chantier.status)
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Progress bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Avancement", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Medium)
+                Text("${chantier.progressPercent}%", fontSize = 11.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            CustomLinearProgressBar(progress = chantier.progressPercent / 100f)
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Budget bar
+            val hasBudget = chantier.budgetTotal > 0f
+            val budgetProgress = if (hasBudget) chantier.budgetSpent / chantier.budgetTotal else 0f
+            val budgetOverspent = chantier.budgetSpent > chantier.budgetTotal && hasBudget
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Budget consommé", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Medium)
+                Text(
+                    text = if (hasBudget) {
+                        "${chantier.budgetSpent.toInt()} € / ${chantier.budgetTotal.toInt()} €"
+                    } else {
+                        "Non défini"
+                    },
+                    fontSize = 11.sp,
+                    color = if (budgetOverspent) Color(0xFFC1666B) else Anthracite,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            if (hasBudget) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(LightGrayDivider)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fraction = budgetProgress.coerceAtMost(1f))
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (budgetOverspent) Color(0xFFC1666B) else GoldClassic)
+                    )
+                }
+                if (budgetOverspent) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "⚠ Dépassement budgétaire !",
+                        fontSize = 10.sp,
+                        color = Color(0xFFC1666B),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                Text("Aucun budget total spécifié", fontSize = 10.sp, color = MediumGray, fontStyle = FontStyle.Italic)
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Dates & Due Date warning
+            Divider(color = LightGrayDivider, thickness = 0.5.dp)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        tint = MediumGray,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Échéance : ${formatFrenchDate(chantier.targetEndDate)}",
+                        fontSize = 11.sp,
+                        color = Anthracite
+                    )
+                }
+
+                if (chantier.status == "Terminé") {
+                    Box(
+                        modifier = Modifier
+                            .background(LightGrayBg, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("Complété", fontSize = 9.sp, color = MediumGray, fontWeight = FontWeight.Bold)
+                    }
+                } else if (isOverdue) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFFFF0F0), RoundedCornerShape(4.dp))
+                            .border(0.5.dp, Color(0xFFC1666B), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("Retard de ${-daysLeft} j", fontSize = 9.sp, color = Color(0xFFC1666B), fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .background(GoldPale, RoundedCornerShape(4.dp))
+                            .border(0.5.dp, GoldClassic, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("Jours restants : $daysLeft j", fontSize = 9.sp, color = GoldClassic, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusBadge(status: String) {
+    val (bgColor, textColor, label) = when (status) {
+        "Terminé" -> Triple(LightGrayBg, MediumGray, "Terminé")
+        "En retard" -> Triple(Color(0xFFFFF5F5), Color(0xFFC1666B), "En retard")
+        "En pause" -> Triple(Color(0xFFF7F7F7), Color(0xFF8A8A8A), "En pause")
+        else -> Triple(GoldPale, GoldClassic, "En cours")
+    }
+
+    Box(
+        modifier = Modifier
+            .background(bgColor, RoundedCornerShape(6.dp))
+            .border(0.5.dp, textColor, RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun CustomLinearProgressBar(progress: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(LightGrayDivider)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction = progress.coerceIn(0f, 1f))
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(3.dp))
+                .background(GradientTokens.sunsetHorizontal)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddChantierDialog(
+    viewModel: OperationsViewModel,
+    activeCount: Int,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf("") }
+    var startDate by remember { mutableStateOf(viewModel.getTodayDate()) }
+    var targetEndDate by remember { mutableStateOf("") }
+    var progressPercent by remember { mutableStateOf("0") }
+    var budgetTotal by remember { mutableStateOf("") }
+    var budgetSpent by remember { mutableStateOf("0") }
+    var status by remember { mutableStateOf("En cours") }
+    var notes by remember { mutableStateOf("") }
+
+    var showErrorLimit by remember { mutableStateOf(activeCount >= 5) }
+
+    // Auto-calculate end date to 30 days from now if left empty
+    LaunchedEffect(Unit) {
+        try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val calendar = Calendar.getInstance()
+            calendar.add(Calendar.DAY_OF_MONTH, 30)
+            targetEndDate = sdf.format(calendar.time)
+        } catch (e: Exception) {
+            targetEndDate = "2026-08-11"
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        containerColor = WhitePure,
+        title = {
+            Text(
+                text = "Créer un nouveau chantier",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Anthracite
+            )
+        },
+        text = {
+            if (showErrorLimit) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFFFF0F0), RoundedCornerShape(8.dp))
+                            .border(0.5.dp, Color(0xFFC1666B), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = "Limitation : Vous avez atteint la limite de 5 chantiers actifs simultanément. Veuillez marquer un autre chantier comme \"Terminé\" avant de pouvoir en ajouter un nouveau.",
+                            fontSize = 12.sp,
+                            color = Color(0xFFC1666B),
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Nom du chantier*", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth().testTag("add_chantier_name"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = location,
+                        onValueChange = { location = it },
+                        label = { Text("Localisation", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        singleLine = true
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = startDate,
+                            onValueChange = { startDate = it },
+                            label = { Text("Début (AAAA-MM-JJ)", fontSize = 10.sp) },
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldClassic,
+                                unfocusedBorderColor = LightGrayDivider
+                            ),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = targetEndDate,
+                            onValueChange = { targetEndDate = it },
+                            label = { Text("Échéance (AAAA-MM-JJ)", fontSize = 10.sp) },
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldClassic,
+                                unfocusedBorderColor = LightGrayDivider
+                            ),
+                            singleLine = true
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = budgetTotal,
+                            onValueChange = { budgetTotal = it },
+                            label = { Text("Budget Total (€)", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldClassic,
+                                unfocusedBorderColor = LightGrayDivider
+                            ),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = budgetSpent,
+                            onValueChange = { budgetSpent = it },
+                            label = { Text("Budget Consommé (€)", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldClassic,
+                                unfocusedBorderColor = LightGrayDivider
+                            ),
+                            singleLine = true
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = progressPercent,
+                        onValueChange = { progressPercent = it },
+                        label = { Text("Avancement (0-100 %)", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Notes initiales", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        maxLines = 3
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (!showErrorLimit) {
+                Button(
+                    onClick = {
+                        if (name.isNotBlank()) {
+                            val prog = progressPercent.toIntOrNull() ?: 0
+                            val bt = budgetTotal.toFloatOrNull() ?: 0f
+                            val bs = budgetSpent.toFloatOrNull() ?: 0f
+                            viewModel.addChantier(
+                                name = name,
+                                location = location,
+                                startDate = startDate,
+                                targetEndDate = targetEndDate,
+                                progressPercent = prog.coerceIn(0, 100),
+                                budgetTotal = bt,
+                                budgetSpent = bs,
+                                status = status,
+                                notes = notes
+                            )
+                            onDismiss()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                    enabled = name.isNotBlank()
+                ) {
+                    Text("Ajouter", color = Color.White)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fermer", color = MediumGray)
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChantierDetailPage(
+    viewModel: OperationsViewModel,
+    chantierId: Long,
+    onBack: () -> Unit
+) {
+    val chantiers by viewModel.chantiers.collectAsState()
+    val chantier = chantiers.find { it.id == chantierId }
+
+    if (chantier == null) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Chantier introuvable", color = MediumGray)
+        }
+        BackHandler { onBack() }
+        return
+    }
+
+    val milestones by viewModel.getMilestonesForChantierFlow(chantierId).collectAsState(initial = emptyList())
+    val incidents by viewModel.getIncidentsForChantierFlow(chantierId).collectAsState(initial = emptyList())
+
+    var showEditInfoDialog by remember { mutableStateOf(false) }
+    var notesText by remember { mutableStateOf(chantier.notes) }
+
+    var milestoneName by remember { mutableStateOf("") }
+    var milestoneDate by remember { mutableStateOf(viewModel.getTodayDate()) }
+
+    var incidentDescription by remember { mutableStateOf("") }
+    var incidentSeverity by remember { mutableStateOf("Mineur") }
+
+    BackHandler {
+        onBack()
+    }
+
+    Scaffold(
+        containerColor = WhitePure,
+        topBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.testTag("detail_back_button")) {
+                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Retour", tint = GoldClassic)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = chantier.name,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { showEditInfoDialog = true }, modifier = Modifier.testTag("edit_chantier_button")) {
+                    Icon(imageVector = Icons.Default.Edit, contentDescription = "Modifier", tint = GoldClassic)
+                }
+                IconButton(onClick = {
+                    viewModel.deleteChantierById(chantierId)
+                    onBack()
+                }, modifier = Modifier.testTag("delete_chantier_button")) {
+                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Supprimer", tint = Color(0xFFC1666B))
+                }
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            item {
+                OperationsCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Informations Générales", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                            StatusBadge(status = chantier.status)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (chantier.location.isNotEmpty()) {
+                            DetailRow(label = "Localisation", value = chantier.location, icon = Icons.Default.Place)
+                        }
+                        DetailRow(label = "Date de début", value = formatFrenchDate(chantier.startDate), icon = Icons.Default.CalendarToday)
+                        DetailRow(label = "Date d'échéance", value = formatFrenchDate(chantier.targetEndDate), icon = Icons.Default.CalendarToday)
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Avancement global", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Medium)
+                            Text("${chantier.progressPercent}%", fontSize = 11.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CustomLinearProgressBar(progress = chantier.progressPercent / 100f)
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        val hasBudget = chantier.budgetTotal > 0f
+                        val budgetProgress = if (hasBudget) chantier.budgetSpent / chantier.budgetTotal else 0f
+                        val budgetOverspent = chantier.budgetSpent > chantier.budgetTotal && hasBudget
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Budget consommé", fontSize = 11.sp, color = MediumGray, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = if (hasBudget) {
+                                    "${chantier.budgetSpent.toInt()} € / ${chantier.budgetTotal.toInt()} €"
+                                } else {
+                                    "Non défini"
+                                },
+                                fontSize = 11.sp,
+                                color = if (budgetOverspent) Color(0xFFC1666B) else Anthracite,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        if (hasBudget) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LightGrayDivider)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(fraction = budgetProgress.coerceAtMost(1f))
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(if (budgetOverspent) Color(0xFFC1666B) else GoldClassic)
+                                )
+                            }
+                            if (budgetOverspent) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "⚠ Le budget consommé dépasse le budget total prévu !",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFC1666B),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                OperationsCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Jalons & Livrables", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = milestoneName,
+                                onValueChange = { milestoneName = it },
+                                label = { Text("Nouveau jalon", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1.5f).testTag("milestone_name_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GoldClassic,
+                                    unfocusedBorderColor = LightGrayDivider
+                                ),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = milestoneDate,
+                                onValueChange = { milestoneDate = it },
+                                label = { Text("Date (AAAA-MM-JJ)", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f).testTag("milestone_date_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GoldClassic,
+                                    unfocusedBorderColor = LightGrayDivider
+                                ),
+                                singleLine = true
+                            )
+                            IconButton(
+                                onClick = {
+                                    if (milestoneName.isNotBlank() && milestoneDate.isNotBlank()) {
+                                        viewModel.addMilestone(chantierId, milestoneName, milestoneDate)
+                                        milestoneName = ""
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(GoldClassic, RoundedCornerShape(8.dp))
+                                    .testTag("add_milestone_button")
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = "Ajouter", tint = Color.White)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (milestones.isEmpty()) {
+                            Text(
+                                "Aucun jalon défini pour le moment.",
+                                fontSize = 11.sp,
+                                color = MediumGray,
+                                fontStyle = FontStyle.Italic
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                milestones.forEach { milestone ->
+                                    val isMilestoneOverdue = !milestone.completed && calculateDaysDifference(milestone.targetDate) < 0
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(LightGrayBg, RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = milestone.completed,
+                                            onCheckedChange = { isChecked ->
+                                                viewModel.updateMilestone(milestone.copy(completed = isChecked))
+                                            },
+                                            colors = CheckboxDefaults.colors(checkedColor = GoldClassic),
+                                            modifier = Modifier.testTag("milestone_check_${milestone.id}")
+                                        )
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = milestone.name,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (milestone.completed) MediumGray else Anthracite,
+                                                textDecoration = if (milestone.completed) TextDecoration.LineThrough else TextDecoration.None
+                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = "Prévu le : ${formatFrenchDate(milestone.targetDate)}",
+                                                    fontSize = 10.sp,
+                                                    color = MediumGray
+                                                )
+                                                if (isMilestoneOverdue) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = "⚠ Retard !",
+                                                        fontSize = 10.sp,
+                                                        color = Color(0xFFC1666B),
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        IconButton(onClick = { viewModel.deleteMilestoneById(milestone.id) }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Supprimer jalon",
+                                                tint = MediumGray,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                OperationsCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Incidents & Blocages", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(LightGrayBg, RoundedCornerShape(8.dp))
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = incidentDescription,
+                                onValueChange = { incidentDescription = it },
+                                label = { Text("Signaler un incident (matériel, météo...)", fontSize = 11.sp) },
+                                modifier = Modifier.fillMaxWidth().testTag("incident_desc_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GoldClassic,
+                                    unfocusedBorderColor = LightGrayDivider
+                                ),
+                                singleLine = true
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Gravité :", fontSize = 11.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+                                    listOf("Mineur", "Majeur", "Critique").forEach { sev ->
+                                        val isSelected = incidentSeverity == sev
+                                        val chipColor = when (sev) {
+                                            "Critique" -> if (isSelected) Color(0xFFC1666B) else Color(0x1AC1666B)
+                                            "Majeur" -> if (isSelected) SunsetAmber else Color(0x1AE8A33D)
+                                            else -> if (isSelected) GoldClassic else Color(0x1AD4AF37)
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(chipColor)
+                                                .clickable { incidentSeverity = sev }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = sev,
+                                                color = if (isSelected) Color.White else Anthracite,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Button(
+                                    onClick = {
+                                        if (incidentDescription.isNotBlank()) {
+                                            viewModel.addIncident(
+                                                chantierId = chantierId,
+                                                date = viewModel.getTodayDate(),
+                                                description = incidentDescription,
+                                                severity = incidentSeverity
+                                            )
+                                            incidentDescription = ""
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.testTag("add_incident_button"),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text("Signaler", color = Color.White, fontSize = 11.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (incidents.isEmpty()) {
+                            Text(
+                                "Aucun incident signalé.",
+                                fontSize = 11.sp,
+                                color = MediumGray,
+                                fontStyle = FontStyle.Italic
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                incidents.forEach { incident ->
+                                    val sevColor = when (incident.severity) {
+                                        "Critique" -> Color(0xFFC1666B)
+                                        "Majeur" -> SunsetAmber
+                                        else -> GoldClassic
+                                    }
+                                    val sevBg = when (incident.severity) {
+                                        "Critique" -> Color(0xFFFFF0F0)
+                                        "Majeur" -> Color(0xFFFFF9E6)
+                                        else -> GoldPale
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .border(0.5.dp, sevColor, RoundedCornerShape(8.dp))
+                                            .background(sevBg, RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .background(sevColor, RoundedCornerShape(4.dp))
+                                                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        incident.severity.uppercase(),
+                                                        color = Color.White,
+                                                        fontSize = 8.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                                Text(
+                                                    text = formatFrenchDate(incident.date),
+                                                    fontSize = 10.sp,
+                                                    color = MediumGray
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = incident.description,
+                                                fontSize = 12.sp,
+                                                color = Anthracite,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+
+                                        IconButton(onClick = { viewModel.deleteIncidentById(incident.id) }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Supprimer incident",
+                                                tint = MediumGray,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                OperationsCard {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("Notes & Observations", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                        OutlinedTextField(
+                            value = notesText,
+                            onValueChange = { notesText = it },
+                            placeholder = { Text("Rédigez vos remarques ici...", fontSize = 12.sp) },
+                            modifier = Modifier.fillMaxWidth().testTag("notes_input_text"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldClassic,
+                                unfocusedBorderColor = LightGrayDivider
+                            ),
+                            maxLines = 8,
+                            minLines = 4
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Button(
+                                onClick = {
+                                    viewModel.updateChantier(chantier.copy(notes = notesText))
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.testTag("save_notes_button")
+                            ) {
+                                Text("Enregistrer les notes", color = Color.White, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showEditInfoDialog) {
+        EditChantierDialog(
+            viewModel = viewModel,
+            chantier = chantier,
+            onDismiss = { showEditInfoDialog = false }
+        )
+    }
+}
+
+@Composable
+fun DetailRow(label: String, value: String, icon: ImageVector) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(imageVector = icon, contentDescription = null, tint = GoldClassic, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = "$label : ", fontSize = 12.sp, color = MediumGray, fontWeight = FontWeight.Medium)
+        Text(text = value, fontSize = 12.sp, color = Anthracite, fontWeight = FontWeight.Bold)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditChantierDialog(
+    viewModel: OperationsViewModel,
+    chantier: Chantier,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf(chantier.name) }
+    var location by remember { mutableStateOf(chantier.location) }
+    var startDate by remember { mutableStateOf(chantier.startDate) }
+    var targetEndDate by remember { mutableStateOf(chantier.targetEndDate) }
+    var progressPercent by remember { mutableStateOf(chantier.progressPercent.toString()) }
+    var budgetTotal by remember { mutableStateOf(chantier.budgetTotal.toString()) }
+    var budgetSpent by remember { mutableStateOf(chantier.budgetSpent.toString()) }
+    var status by remember { mutableStateOf(chantier.status) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        containerColor = WhitePure,
+        title = {
+            Text(
+                text = "Modifier le chantier",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Anthracite
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nom du chantier", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth().testTag("edit_chantier_name"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldClassic,
+                        unfocusedBorderColor = LightGrayDivider
+                    ),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("Localisation", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldClassic,
+                        unfocusedBorderColor = LightGrayDivider
+                    ),
+                    singleLine = true
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = startDate,
+                        onValueChange = { startDate = it },
+                        label = { Text("Date de début", fontSize = 10.sp) },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = targetEndDate,
+                        onValueChange = { targetEndDate = it },
+                        label = { Text("Date d'échéance", fontSize = 10.sp) },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = budgetTotal,
+                        onValueChange = { budgetTotal = it },
+                        label = { Text("Budget Total (€)", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = budgetSpent,
+                        onValueChange = { budgetSpent = it },
+                        label = { Text("Budget Consommé (€)", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldClassic,
+                            unfocusedBorderColor = LightGrayDivider
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                OutlinedTextField(
+                    value = progressPercent,
+                    onValueChange = { progressPercent = it },
+                    label = { Text("Avancement (0-100 %)", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldClassic,
+                        unfocusedBorderColor = LightGrayDivider
+                    ),
+                    singleLine = true
+                )
+
+                Text("Statut :", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Anthracite)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("En cours", "En retard", "En pause", "Terminé").forEach { st ->
+                        val isSelected = status == st
+                        val btnColor = if (isSelected) GoldClassic else LightGrayBg
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(btnColor)
+                                .clickable { status = st }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = st,
+                                color = if (isSelected) Color.White else Anthracite,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (name.isNotBlank()) {
+                        val prog = progressPercent.toIntOrNull() ?: 0
+                        val bt = budgetTotal.toFloatOrNull() ?: 0f
+                        val bs = budgetSpent.toFloatOrNull() ?: 0f
+                        viewModel.updateChantier(
+                            chantier.copy(
+                                name = name,
+                                location = location,
+                                startDate = startDate,
+                                targetEndDate = targetEndDate,
+                                progressPercent = prog.coerceIn(0, 100),
+                                budgetTotal = bt,
+                                budgetSpent = bs,
+                                status = status
+                            )
+                        )
+                        onDismiss()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = GoldClassic),
+                enabled = name.isNotBlank()
+            ) {
+                Text("Enregistrer", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annuler", color = MediumGray)
+            }
+        }
+    )
+}
+
+fun formatFrenchDate(dateStr: String): String {
+    return try {
+        val sdfInput = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val date = sdfInput.parse(dateStr) ?: return dateStr
+        val sdfOutput = SimpleDateFormat("dd MMMM yyyy", Locale.FRANCE)
+        sdfOutput.format(date)
+    } catch (e: Exception) {
+        dateStr
+    }
+}
+
+fun calculateDaysDifference(targetDateStr: String): Int {
+    return try {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val targetDate = sdf.parse(targetDateStr) ?: return 0
+        
+        val todayCal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        
+        val targetCal = Calendar.getInstance().apply {
+            time = targetDate
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        
+        val diffMs = targetCal.timeInMillis - todayCal.timeInMillis
+        (diffMs / (1000 * 60 * 60 * 24)).toInt()
+    } catch (e: Exception) {
+        0
+    }
+}
+
+@Composable
+fun RitualPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Unit) {
+    val todayStr = viewModel.getTodayDate()
+    
+    // Collect states to trigger recomposition on any updates
+    val tasks by viewModel.tasks.collectAsState()
+    val gymSessions by viewModel.gymSessions.collectAsState()
+    val supplementLogs by viewModel.supplementLogs.collectAsState()
+    val kegelLogs by viewModel.kegelLogs.collectAsState()
+    val breathingSessions by viewModel.breathingSessions.collectAsState()
+    val journalEntries by viewModel.journalEntries.collectAsState()
+    val sleepLogs by viewModel.sleepLogs.collectAsState()
+    val sunExposureLogs by viewModel.sunExposureLogs.collectAsState()
+    val communicationPracticeLogs by viewModel.communicationPracticeLogs.collectAsState()
+    val delayTrainingLogs by viewModel.delayTrainingLogs.collectAsState()
+    val cardioHealthLogs by viewModel.cardioHealthLogs.collectAsState()
+    val morningErectionLogs by viewModel.morningErectionLogs.collectAsState()
+    val dailyWins by viewModel.dailyWins.collectAsState()
+    val gratitudeLogs by viewModel.gratitudeLogs.collectAsState()
+    val dailyAffirmation by viewModel.dailyAffirmation.collectAsState()
+    val restDays by viewModel.restDays.collectAsState()
+
+    val isRestDayActive = restDays.any { it.date == todayStr && it.active }
+
+    // Aggregate the ritual plan
+    val ritualPlan = remember(
+        todayStr, tasks, gymSessions, supplementLogs, kegelLogs, breathingSessions,
+        journalEntries, sleepLogs, sunExposureLogs, communicationPracticeLogs,
+        delayTrainingLogs, cardioHealthLogs, morningErectionLogs, dailyWins,
+        gratitudeLogs, dailyAffirmation
+    ) {
+        com.example.data.DailyRitualAggregator.buildTodayRitual(viewModel, todayStr)
+    }
+
+    val formattedDate = remember(todayStr) {
+        try {
+            val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(todayStr) ?: java.util.Date()
+            SimpleDateFormat("EEEE d MMMM", Locale.FRANCE).format(date).replaceFirstChar { it.uppercase() }
+        } catch (e: Exception) {
+            todayStr
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(horizontal = 24.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 600.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(vertical = 24.dp)
+        ) {
+            item {
+                PageHeader(
+                    title = "Rituel du Jour",
+                    subtitle = formattedDate
+                )
+            }
+
+            if (isRestDayActive) {
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(LightBeige, RoundedCornerShape(12.dp))
+                            .padding(24.dp)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.NightsStay,
+                                contentDescription = "Rest Day",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Jour de pause activé — repose-toi, tout reprend normalement demain.",
+                                fontSize = 14.sp,
+                                color = GoldClassic,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Progress Bar
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(LightGrayBg, RoundedCornerShape(16.dp))
+                            .border(1.dp, LightGrayDivider, RoundedCornerShape(16.dp))
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Progression Globale",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite
+                            )
+                            Text(
+                                text = "${ritualPlan.completionPercent}%",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = GoldClassic
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .background(Color.LightGray.copy(alpha = 0.3f), CircleShape)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(ritualPlan.completionPercent / 100f)
+                                    .background(GradientTokens.sunsetHorizontal, CircleShape)
+                            )
+                        }
+                    }
+                }
+
+                // If all completed, show elegant empty state
+                if (ritualPlan.completionPercent == 100) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = "Rituel Complété",
+                                tint = GoldClassic,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Rituel du jour terminé !",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Anthracite,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Bien joué. 🕊️",
+                                fontSize = 14.sp,
+                                color = GoldClassic,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                // MATIN Section
+                if (ritualPlan.morningItems.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "MATIN",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = GoldClassic,
+                            modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    val morningSorted = ritualPlan.morningItems.sortedBy { it.isCompleted }
+                    items(morningSorted.size) { index ->
+                        val item = morningSorted[index]
+                        RitualItemRow(item = item, onNavigateToPage = onNavigateToPage)
+                    }
+                }
+
+                // JOURNÉE Section
+                if (ritualPlan.dayItems.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "JOURNÉE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = GoldClassic,
+                            modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    val daySorted = ritualPlan.dayItems.sortedBy { it.isCompleted }
+                    items(daySorted.size) { index ->
+                        val item = daySorted[index]
+                        RitualItemRow(item = item, onNavigateToPage = onNavigateToPage)
+                    }
+                }
+
+                // SOIR Section
+                if (ritualPlan.eveningItems.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "SOIR",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = GoldClassic,
+                            modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    val eveningSorted = ritualPlan.eveningItems.sortedBy { it.isCompleted }
+                    items(eveningSorted.size) { index ->
+                        val item = eveningSorted[index]
+                        RitualItemRow(item = item, onNavigateToPage = onNavigateToPage)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RitualItemRow(
+    item: com.example.data.RitualItem,
+    onNavigateToPage: (Int) -> Unit
+) {
+    val isActionable = item.quickToggleAction != null
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable {
+                if (isActionable && item.quickToggleAction != null) {
+                    item.quickToggleAction.invoke()
+                } else {
+                    onNavigateToPage(item.sourcePageIndex)
+                }
+            }
+            .background(if (item.isCompleted) Color.Transparent else LightGrayBg.copy(alpha = 0.5f))
+            .padding(vertical = 12.dp, horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isActionable) {
+                PremiumCheckbox(
+                    checked = item.isCompleted,
+                    onCheckedChange = { _ -> item.quickToggleAction?.invoke() },
+                    modifier = Modifier.testTag("ritual_checkbox_${item.label.lowercase().replace(" ", "_")}")
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = "Action complexe requise",
+                    tint = GoldClassic.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = item.label,
+                fontSize = 13.sp,
+                color = if (item.isCompleted) MediumGray else Anthracite,
+                textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                lineHeight = 18.sp,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        
+        if (!isActionable) {
+            Icon(
+                imageVector = Icons.Default.ArrowForward,
+                contentDescription = "Naviguer pour compléter",
+                tint = GoldClassic,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun StreaksOverviewPage(viewModel: OperationsViewModel, onNavigateToPage: (Int) -> Unit) {
+    val todayStr = viewModel.getTodayDate()
+    
+    // Collect all states to trigger recomposition on any updates
+    val tasks by viewModel.tasks.collectAsState()
+    val gymSessions by viewModel.gymSessions.collectAsState()
+    val supplementLogs by viewModel.supplementLogs.collectAsState()
+    val kegelLogs by viewModel.kegelLogs.collectAsState()
+    val breathingSessions by viewModel.breathingSessions.collectAsState()
+    val journalEntries by viewModel.journalEntries.collectAsState()
+    val sleepLogs by viewModel.sleepLogs.collectAsState()
+    val sunExposureLogs by viewModel.sunExposureLogs.collectAsState()
+    val communicationPracticeLogs by viewModel.communicationPracticeLogs.collectAsState()
+    val delayTrainingLogs by viewModel.delayTrainingLogs.collectAsState()
+    val cardioHealthLogs by viewModel.cardioHealthLogs.collectAsState()
+    val morningErectionLogs by viewModel.morningErectionLogs.collectAsState()
+    val dailyWins by viewModel.dailyWins.collectAsState()
+    val gratitudeLogs by viewModel.gratitudeLogs.collectAsState()
+    val dailyAffirmation by viewModel.dailyAffirmation.collectAsState()
+    val restDays by viewModel.restDays.collectAsState()
+    val recoveryStreaks by viewModel.recoveryStreaks.collectAsState()
+
+    var sortOrder by remember { mutableStateOf("longest") }
+
+    val activeStreaks = remember(
+        todayStr, tasks, gymSessions, supplementLogs, kegelLogs, breathingSessions,
+        journalEntries, sleepLogs, sunExposureLogs, communicationPracticeLogs,
+        delayTrainingLogs, cardioHealthLogs, morningErectionLogs, dailyWins,
+        gratitudeLogs, dailyAffirmation, restDays, recoveryStreaks
+    ) {
+        StreaksOverview.getAllActiveStreaks(viewModel, todayStr)
+    }
+
+    val activeCount = activeStreaks.count { it.currentCount > 0 }
+    val strongestStreak = activeStreaks.maxByOrNull { it.currentCount }
+    val synthesisText = if (strongestStreak != null && strongestStreak.currentCount > 0) {
+        "Tu as actuellement $activeCount ${if (activeCount > 1) "streaks actifs" else "streak actif"}. Ton plus fort est ${strongestStreak.label} avec ${strongestStreak.currentCount} ${if (strongestStreak.currentCount > 1) "jours" else "jour"} ! 🔥"
+    } else {
+        "Aucun streak actif pour le moment. C'est le moment idéal pour démarrer une nouvelle habitude saine ! 🚀"
+    }
+
+    val sortedStreaks = remember(activeStreaks, sortOrder) {
+        when (sortOrder) {
+            "longest" -> activeStreaks.sortedByDescending { it.currentCount }
+            "name" -> activeStreaks.sortedBy { it.label }
+            else -> activeStreaks
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(horizontal = 24.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 600.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(vertical = 24.dp)
+        ) {
+            item {
+                PageHeader(
+                    title = "Mes Streaks",
+                    subtitle = "Vue d'ensemble de votre régularité"
+                )
+            }
+
+            // Synthesis card
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(GradientTokens.sunsetVertical)
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocalFireDepartment,
+                            contentDescription = "Streaks",
+                            tint = Color.White,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Aperçu de vos efforts",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = synthesisText,
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.9f),
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Sort Selector Row
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Trier par :",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MediumGray
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = { sortOrder = "longest" },
+                            colors = ButtonDefaults.textButtonColors(
+                                containerColor = if (sortOrder == "longest") LightBeige else Color.Transparent,
+                                contentColor = if (sortOrder == "longest") GoldClassic else MediumGray
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(32.dp).testTag("sort_streaks_longest")
+                        ) {
+                            Text("Plus fort d'abord", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(
+                            onClick = { sortOrder = "name" },
+                            colors = ButtonDefaults.textButtonColors(
+                                containerColor = if (sortOrder == "name") LightBeige else Color.Transparent,
+                                contentColor = if (sortOrder == "name") GoldClassic else MediumGray
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(32.dp).testTag("sort_streaks_name")
+                        ) {
+                            Text("A-Z", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // Grid of streaks
+            val chunkedStreaks = sortedStreaks.chunked(2)
+            items(chunkedStreaks.size) { index ->
+                val rowItems = chunkedStreaks[index]
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    StreakCard(
+                        item = rowItems[0],
+                        onNavigate = onNavigateToPage,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (rowItems.size > 1) {
+                        StreakCard(
+                            item = rowItems[1],
+                            onNavigate = onNavigateToPage,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StreakCard(
+    item: StreakSummary,
+    onNavigate: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val icon = when (item.iconName) {
+        "FlashOn" -> Icons.Filled.FlashOn
+        "Favorite" -> Icons.Filled.Favorite
+        "SmokeFree" -> Icons.Filled.SmokeFree
+        "Forum" -> Icons.Filled.Forum
+        "Psychology" -> Icons.Filled.Psychology
+        "WbSunny" -> Icons.Filled.WbSunny
+        else -> Icons.Filled.TrendingUp
+    }
+
+    val progress = if (item.bestCount > 0) {
+        item.currentCount.toFloat() / item.bestCount.toFloat()
+    } else {
+        0f
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onNavigate(item.sourcePageIndex) }
+            .testTag("streak_card_${item.label.lowercase().replace(" ", "_")}"),
+        colors = CardDefaults.cardColors(containerColor = LightGrayBg.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, LightGrayDivider)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = item.label,
+                    tint = GoldClassic,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = item.label,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Anthracite,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                AnimatedCountText(
+                    value = item.currentCount,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Anthracite
+                )
+                Text(
+                    text = if (item.currentCount > 1) "jours" else "jour",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MediumGray,
+                    modifier = Modifier.padding(bottom = 3.dp)
+                )
+            }
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Record : ${item.bestCount} j",
+                    fontSize = 11.sp,
+                    color = GoldClassic,
+                    fontWeight = FontWeight.Medium
+                )
+                
+                // Discret sunset progress bar
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(Color.LightGray.copy(alpha = 0.3f), CircleShape)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(progress.coerceIn(0f, 1f))
+                            .background(GradientTokens.sunsetHorizontal, CircleShape)
+                    )
+                }
+            }
+        }
+    }
+}
+
+
 
 
 

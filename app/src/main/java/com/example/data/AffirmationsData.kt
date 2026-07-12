@@ -61,6 +61,40 @@ object AffirmationsData {
         "Je m'élève au-dessus du bruit et de la médiocrité.",
         "Mon esprit est une forteresse imprenable d'ambition et de paix."
     )
+    
+    val confidenceStatements = listOf(
+        "Je fais confiance à mes décisions.",
+        "Je n'ai pas besoin de l'approbation des autres pour avancer.",
+        "Ma valeur ne dépend pas du jugement extérieur.",
+        "Je me tiens debout, même dans l'incertitude.",
+        "Je possède les compétences pour surmonter tous les défis d'aujourd'hui.",
+        "Chaque obstacle est une opportunité de prouver ma valeur et ma résilience.",
+        "Je m'exprime avec clarté, assurance et sincérité.",
+        "Je suis fier de mon parcours et des batailles que j'ai gagnées en silence.",
+        "Ma confiance grandit à mesure que je relève de nouveaux défis.",
+        "Je ne me compare pas aux autres ; je cherche seulement à me dépasser moi-même.",
+        "Je mérite de réussir et de vivre une vie épanouie.",
+        "Je contrôle ma posture, mon regard et ma voix pour refléter ma force intérieure.",
+        "Je suis capable d'apprendre rapidement et de m'adapter à toutes les situations.",
+        "Je ne crains pas l'échec ; c'est simplement une leçon vers la maîtrise.",
+        "Ma présence est calme, forte et rassurante pour moi et pour les autres.",
+        "Je définis mes propres limites et je les fais respecter avec fermeté."
+    )
+
+    fun getDailyDeterministicItem(list: List<String>, date: String, offset: Int = 0): String {
+        if (list.isEmpty()) return ""
+        val dayOfYear = try {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            val parsedDate = sdf.parse(date) ?: java.util.Date()
+            val cal = java.util.Calendar.getInstance()
+            cal.time = parsedDate
+            cal.get(java.util.Calendar.DAY_OF_YEAR)
+        } catch (e: Exception) {
+            date.hashCode()
+        }
+        val index = Math.abs(dayOfYear + offset) % list.size
+        return list[index]
+    }
 
     fun getRandomAffirmation(): String {
         val index = Random.nextInt(affirmations.size)
